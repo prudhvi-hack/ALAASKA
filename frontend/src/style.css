@@ -1,0 +1,427 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Roboto', sans-serif;
+  }
+
+  /* === App Wrapper === */
+  .app-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* changed from height */
+    overflow: visible;
+  }
+  
+  /* === Layout Wrapper === */
+  .container {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    min-height: 0; /* Add this */
+  }
+  
+  /* === Sidebar === */ 
+  .sidebar {
+    width: 25%;
+    flex-shrink: 0; /* prevent shrinking */
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    overflow: hidden; /* prevent outer scroll */
+    padding: 1rem;
+    background-color: whitesmoke;
+    box-sizing: border-box;
+  }
+  /* === Fixed Top Section === */
+  .sidebar-top {
+    flex-shrink: 0;
+    padding: 1rem;
+    background-color: whitesmoke;
+  }
+  
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    margin-top: -20px;
+  }
+  
+  .sidebar-logo {
+    width: 52px;
+    height: 52px;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+  
+  .sidebar-title {
+    font-weight: bold;
+    font-size: 1.7rem;
+    color: lightseagreen;
+  }
+
+  /* === Scrollable Section === */
+  .sidebar-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+  
+  /* === Right Content Section === */
+  .content-area {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;  /* Add this */
+  }
+  
+  /* === Fixed Top Bar === */
+  .top-bar {
+    height: 58px;
+    padding: 0 1rem;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  .top-bar-title {
+    font-size: 1rem;
+    color: darkgray;
+    font-weight: normal;
+  }
+  
+  /* === Fixed Footer === */
+  .footer {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #777;
+    padding: 10px;
+    width: 100%;
+    height: auto;
+    display: flex;
+    min-height: 40px;
+    justify-content: center;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  
+  /* === Scrollable Main Section === */
+  .main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    min-height: 0; /* Add this */
+  }
+  
+  /* === Chat Section === */
+  .chatbox {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: visible;
+  }
+  
+  /* === Scrollable Messages === flex-grow: 1; */
+  /* Scrollable container */
+  .messages {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    background: #fff;
+    padding: 1rem 0; /* vertical padding only */
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* center the inner div */
+    min-height: 0;           /* ensures full-page width */
+    box-sizing: border-box;
+  }
+
+  .messages-inner {
+    flex: 1 1 auto;
+    padding: 1rem;
+    background: #fff;
+    margin-bottom: 0;
+    min-height: 0;
+    width: 85%;
+    align-content: center;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* === Message Styling === */
+  .message {
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    border-radius: 10px;
+    max-width: 80%;
+    line-height: 1.4;
+    word-wrap: break-word;
+    font-size: 15px;
+  }
+  
+  /* User = right, gray background */
+  .user-message {
+    align-self: flex-end;
+    background-color: #e6e6e6;
+    text-align: right;
+  }
+  
+  /* Assistant = left, white background */
+  .assistant-message {
+    align-self: flex-start;
+    background-color: #ffffff;
+    text-align: left;
+  }
+  
+  /* === Input Area === */
+  .input-container {
+    position: relative;
+    padding-top: 0.5rem;
+    z-index: 10;
+    flex-shrink: 0;
+    width: 80%;
+    margin: 0 auto;
+    max-width: 100%;
+  }
+  
+  .input-container textarea {
+    width: 100%;
+    padding: 0.75rem 3rem 0.75rem 0.75rem;
+    padding-right: 40px; /* space for send icon */
+    font-size: 1rem;
+    border-radius: 12px;
+    border: 1px solid #ccc;
+    resize: vertical;
+    line-height: 1.4;
+    box-sizing: border-box;
+    font-family: Arial, Helvetica, sans-serif;
+    min-height: 5rem;
+    max-height: 200px; /* Added max height */
+  }
+  
+  /* === Input and Button Styling === */
+  input[type="text"] {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  .send-button {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: #555;
+    padding: 0;
+    min-width: 44px; /* increased min size for touch */
+    min-height: 44px;
+  }
+  
+  .send-button:hover {
+    color: mintcream;
+    transform: translateY(-50%) scale(1.0);
+  }
+  
+  button {
+    padding: 0.5rem 1rem;
+    border: none;
+    background-color: teal;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  button:hover {
+    background-color: lightseagreen;
+  }
+  
+  /* === New Chat Button === */
+  .new-chat-button {
+    background:none;
+    border: none;
+    color: darkslategrey;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    position: relative;
+    left: -15px;
+    gap: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 20px; /* Pushes it lower on the page */
+    margin-bottom: 1rem; /* removed quotes */
+  }
+  
+  /* Past conversations button style */
+  .chat-title {
+    color:darkgrey;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+    font-weight: normal;
+  }
+  .conversation-button {
+    background: none;
+    border: none;
+    color: dimgray;
+    text-align: left;
+    padding: 0.5rem 0;
+    margin-bottom: 0.75rem;
+    cursor: pointer;
+    font-size: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .conversation-button:hover {
+    color: mintcream;
+    text-decoration: none;
+  }
+  
+  /* === Delete Button === */
+  .delete-button {
+    background: none !important;
+    border: none !important;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: black;     
+  }
+  .delete-button svg {
+    align-items: center;
+    position: relative;
+    top: -3px;
+  }
+  .delete-button:hover {
+    color: mintcream;
+    text-decoration: none;
+  }
+
+  /* === Authentication Forms === */
+  .auth-form-container {
+    max-width: 400px;
+    margin: 2rem auto;
+    padding: 1rem;
+    box-sizing: border-box;
+  }
+  
+  .auth-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+  }
+  
+  .auth-button {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    border: none;
+    background-color: teal;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  .auth-button:hover {
+    background-color: lightseagreen;
+  }
+  
+  .auth-switch-text {
+    text-align: center;
+    font-size: 0.9rem;
+  }
+  
+  .auth-switch-text button {
+    background: none;
+    border: none;
+    color: teal;
+    cursor: pointer;
+    font-weight: bold;
+    padding: 0;
+    margin-left: 0.25rem;
+  }
+
+  
+  /* === Responsive Media Queries === */
+  
+  @media (max-width: 768px) {
+    .app-wrapper {
+      flex-direction: column !important;
+      min-height: 100vh;
+    }
+    .sidebar {
+      width: 100% !important;
+      height: auto !important;
+      max-height: 30vh;
+      overflow-y: auto;
+      padding: 0.5rem;
+    }
+    .content-area {
+      min-height: auto !important;
+      height: auto !important;
+    }
+    .main {
+      flex-direction: column !important;
+      overflow: visible !important;
+    }
+    .input-container {
+      width: 100% !important;
+      padding: 0.5rem !important;
+    }
+    .messages {
+      max-height: 40vh !important;
+    }
+    .send-button {
+      right: 10px !important;
+      top: 50% !important;
+    }
+    button {
+      min-width: 44px !important;
+      min-height: 44px !important;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .auth-form-container {
+        margin: 1rem;
+        padding: 0.5rem;
+    }
+    .auth-button, .auth-input {
+        font-size: 1rem;
+        padding: 0.9rem 1rem;
+    }
+    .sidebar {
+      max-height: 30vh !important;
+    }
+    .messages {
+      max-height: 30vh !important;
+    }
+    .top-bar {
+      padding: 0.5rem !important;
+    }
+    .top-bar-title {
+      font-size: 0.9rem !important;
+    }
+  }
+  

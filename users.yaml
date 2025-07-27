@@ -1,0 +1,9 @@
+users:
+  John Doe:
+    password: $2b$12$cnLQXk2u6gKL6PkVWFkT.eEEcSToE4olVe15ecPq073wq9J1gWoSe
+  test2:
+    password: $2b$12$B5QaCVy6UOJy1UMhW1QR.eqxxn0VVHx5xmV2n2GoFCUCl1vqNp0gS
+  testuser:
+    password: $2b$12$jh2N1zKH8lKuJ5dhrBlcvO.d/3dh.dPYLuRPKeMluI4e6QWeRITfu
+  user1:
+    password: $2b$12$CkoMCzqgargWME5Mub9CWew7aBDJIqMKL8pSbYzUVVaRnQEWacgsS

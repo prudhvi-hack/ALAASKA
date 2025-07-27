@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+PyYAML
+passlib[bcrypt]
+python-jose[cryptography]
+python-dotenv
+openai
