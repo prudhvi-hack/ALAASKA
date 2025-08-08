@@ -1,108 +1,433 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from openai import OpenAI
-import yaml
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from collections import defaultdict
+from typing import Dict, List
+import time
+from datetime import datetime
+from jose import jwt
+from contextlib import asynccontextmanager
+import logging
+from openai import AsyncOpenAI
+from backend.db_mongo import users_collection, conversations_collection, messages_collection, initialize_database, close_connection
+import httpx
+import html
+import re
 import os
-import json
-import csv
 import uuid
+import requests
+from dotenv import load_dotenv
 
 # ========== ENV SETUP ==========
-from dotenv import load_dotenv
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("Missing OPENAI_API_KEY in .env")
-
-client = OpenAI(api_key=OPENAI_API_KEY)
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 MODEL_ID = os.getenv("MODEL_ID")
+SUMMARIZE_MODEL_ID = os.getenv("SUMMARIZE_MODEL_ID")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
+AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN")
+AUTH0_API_AUDIENCE = os.getenv("AUTH0_API_AUDIENCE")
+ALGORITHM = os.getenv("ALGORITHM")
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 
-USER_DB_FILE = "users.yaml"
-CONVERSATION_DIR = "conversations"
-os.makedirs(CONVERSATION_DIR, exist_ok=True)
+def validate_environment():
+    required_vars = [
+        "OPENAI_API_KEY", "SECRET_KEY", "ALGORITHM", "MODEL_ID", "SUMMARIZE_MODEL_ID",
+         "AUTH0_DOMAIN","AUTH0_API_AUDIENCE", "ALGORITHM", "FRONTEND_URL"
+    ]
+    missing = [var for var in required_vars if not os.getenv(var)]
+    if missing:
+        raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+# Call validation before creating app
+validate_environment()
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-app = FastAPI()
+# ========== Set up logging ========== Chage WARNING TO INFO for debugging
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
+# ========== STARTUP & SHUTDOWN EVENTS ==========
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        await initialize_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+        raise
+    
+    yield  # This is where the app runs
+    
+    # Shutdown
+    try:
+        await close_connection()
+        logger.info("Database connection closed")
+    except Exception as e:
+        logger.error(f"Error closing database connection: {e}")
+
+app = FastAPI(lifespan=lifespan)
+
+origins = [
+    FRONTEND_URL,
+]
+
+
+# ========== MIDDLEWARES ==========
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # adjust to your frontend origin for security
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
+
+@app.middleware("http")
+async def limit_request_size(request: Request, call_next):
+    if request.headers.get("content-length"):
+        content_length = int(request.headers.get("content-length"))
+        if content_length > 1_000_000:  # 1MB limit
+            raise HTTPException(status_code=413, detail="Request too large")
+    response = await call_next(request)
+    return response
 
 # ========== MODELS ==========
 class User(BaseModel):
     username: str
+    email: EmailStr
     password: str
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
 
 class Token(BaseModel):
     access_token: str
     token_type: str
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., max_length=10000, min_length=1)
     chat_id: str | None = None
+    
+    @field_validator('message')
+    @classmethod
+    def sanitize_message(cls, v: str) -> str:
+        return html.escape(v.strip())
 
 # ========== UTILS ==========
-def load_users():
-    if not os.path.exists(USER_DB_FILE):
-        return {"users": {}}
-    with open(USER_DB_FILE, "r") as f:
-        data = yaml.safe_load(f) or {}
-    if "users" not in data:
-        data["users"] = {}
-    return data
+def get_auth0_jwks():
+    jwks_url = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
+    jwks = requests.get(jwks_url, timeout=60).json()
+    return jwks
 
-def save_users(data):
-    with open(USER_DB_FILE, "w") as f:
-        yaml.dump(data, f)
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
-
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-def get_current_user(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=401, detail="Could not validate credentials"
-    )
+def verify_token(token: str):
+    jwks = get_auth0_jwks()
+    unverified_header = jwt.get_unverified_header(token)
+    rsa_key = {}
+    for key in jwks["keys"]:
+        if key["kid"] == unverified_header["kid"]:
+            rsa_key = {
+                "kty": key["kty"],
+                "kid": key["kid"],
+                "use": key["use"],
+                "n": key["n"],
+                "e": key["e"]
+            }
+    if not rsa_key:
+        raise HTTPException(status_code=401, detail="Unable to find appropriate key")
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-        return username
-    except JWTError:
-        raise credentials_exception
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=ALGORITHM,
+            audience=AUTH0_API_AUDIENCE,
+            issuer=f"https://{AUTH0_DOMAIN}/"
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.JWTClaimsError:
+        raise HTTPException(status_code=401, detail="Incorrect claims")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return payload
 
-def get_user_dir(username):
-    path = os.path.join(CONVERSATION_DIR, username)
-    os.makedirs(path, exist_ok=True)
-    return path
+http_bearer = HTTPBearer()
 
-def summarize_prompt(text):
-    response = client.chat.completions.create(
-        model="gpt-4o",
+async def get_userinfo(access_token: str):
+    userinfo_url = f"https://{AUTH0_DOMAIN}/userinfo"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.get(userinfo_url, headers=headers)
+        if response.status_code != 200:
+            raise HTTPException(status_code=401, detail="Failed to fetch user info")
+        return response.json()
+
+async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
+    token = auth.credentials
+    payload = verify_token(token)
+    user_info = await get_userinfo(token)
+
+    user_id = payload["sub"]
+    email = user_info.get("email", "")
+    name = user_info.get("name") or user_info.get("nickname") or user_id
+
+    existing = await users_collection.find_one({"auth0_id": user_id})
+    if not existing:
+        user_doc = {
+            "auth0_id": user_id,
+            "username": name,
+            "email": email,
+            "created_at": datetime.utcnow()
+        }
+        await users_collection.insert_one(user_doc)
+    else:
+        user_doc = existing
+    
+    return {"auth0_id": user_id, "username": name, "email": email}
+
+def validate_chat_id(chat_id: str):
+    if not re.match(r'^[a-f0-9]{8}$', chat_id):
+        raise HTTPException(status_code=400, detail="Invalid chat ID format")
+
+# ========== RATE LIMITING STORAGE ==========
+rate_limit_storage: Dict[str, List[float]] = defaultdict(list)
+
+def cleanup_old_requests(user_key: str, window_seconds: int = 60):
+    """Remove requests older than the time window"""
+    current_time = time.time()
+    cutoff_time = current_time - window_seconds
+    rate_limit_storage[user_key] = [
+        timestamp for timestamp in rate_limit_storage[user_key] 
+        if timestamp > cutoff_time
+    ]
+
+def check_rate_limit(user_key: str, max_requests: int, window_seconds: int = 60) -> bool:
+    """Check if user is within rate limit"""
+    cleanup_old_requests(user_key, window_seconds)
+    current_requests = len(rate_limit_storage[user_key])
+    return current_requests < max_requests
+
+def record_request(user_key: str):
+    """Record a successful request"""
+    rate_limit_storage[user_key].append(time.time())
+
+async def rate_limit_dependency(request: Request, user: dict = Depends(get_current_user)):
+    """Dependency to check rate limits for different endpoints"""
+    auth0_id = user["auth0_id"]
+    user_key = auth0_id
+    
+    # Check which endpoint is being called
+    path = request.url.path
+    
+    if path == "/chat/start":
+        # 5 new chats per minute
+        if not check_rate_limit(f"start:{user_key}", 5):
+            raise HTTPException(
+                status_code=429, 
+                detail="Rate limit exceeded for starting new chats. Try again in a minute.",
+                headers={"Retry-After": "60"}
+            )
+    elif path == "/chat":
+        # 20 chat messages per minute
+        if not check_rate_limit(f"chat:{user_key}", 20):
+            raise HTTPException(
+                status_code=429, 
+                detail="Rate limit exceeded for chat messages. Try again in a minute.",
+                headers={"Retry-After": "60"}
+            )
+    
+    return user_key
+
+# ========== CHAT ROUTES ==========
+@app.post("/chat/start")
+async def start_chat(user: dict = Depends(get_current_user), user_key: str = Depends(rate_limit_dependency)):
+    chat_id = f"{uuid.uuid4().hex[:8]}"
+    username = user["username"]
+    auth0_id = user["auth0_id"]
+    email = user["email"]
+
+    system_message = {
+        "role": "system",
+        "content": (
+            "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own."
+            "Keep the conversation going with a question at the end your replies."
+            "Identify the student's level with guiding questions about the topic they are inquiring about."
+            "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
+            "Discuss only academic topics and nothing else."
+        )
+    }
+
+    assistant_welcome = {"role": "assistant", "content": "Hi! Welcome to ALAASKA. How can I help you today?"}
+    messages = [system_message, assistant_welcome]
+
+    await conversations_collection.insert_one({
+        "chat_id": chat_id,
+        "auth0_id": auth0_id,
+        "username": username,
+        "email": email,
+        "summary": "",
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow(),
+    })
+
+    await messages_collection.insert_many([
+        {**system_message, "chat_id": chat_id, "timestamp": datetime.utcnow(), "auth0_id": auth0_id, "username": username, "email": email},
+        {**assistant_welcome, "chat_id": chat_id, "timestamp": datetime.utcnow(), "auth0_id": auth0_id, "username": username, "email": email},
+    ])
+
+    # Record successful request AFTER everything succeeds
+    record_request(f"start:{user_key}")
+    
+    return {"response": assistant_welcome["content"], "chat_id": chat_id, "history": messages}
+
+@app.post("/chat")
+async def chat(req: ChatRequest, user: dict = Depends(get_current_user), user_key: str = Depends(rate_limit_dependency)):
+    username = user["username"]
+    auth0_id = user["auth0_id"]
+    email = user["email"]
+
+    # Input validation block
+    if not req.message or len(req.message.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    if len(req.message) > 3000:
+        raise HTTPException(status_code=400, detail="Message exceeds maximum length of 3000 characters")
+    # End of Input validation block
+    try:
+        convo = await conversations_collection.find_one({"chat_id": req.chat_id, "auth0_id": auth0_id}) if req.chat_id else None
+
+        if convo:
+            chat_id = req.chat_id
+            summary = convo.get("summary", "")
+        else:
+            chat_id = f"{uuid.uuid4().hex[:8]}"
+            await conversations_collection.insert_one({
+                "chat_id": chat_id,
+                "auth0_id": auth0_id,
+                "username": username,
+                "email": email,
+                "summary": "",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+            })
+            summary = ""
+
+        user_message = {
+            "chat_id": chat_id,
+            "auth0_id": auth0_id,
+            "username": username,
+            "email": email,
+            "role": "user",
+            "content": req.message,
+            "timestamp": datetime.utcnow()
+        }
+        await messages_collection.insert_one(user_message)
+
+        chat_cursor = messages_collection.find({"chat_id": chat_id}).sort("timestamp", 1)
+        chat_messages = [{"role": m["role"], "content": m["content"]} async for m in chat_cursor]
+
+        if not summary or summary == "" or summary == "New Chat":
+            summary = await summarize_prompt(req.message)
+            await conversations_collection.update_one(
+                {"chat_id": chat_id, "auth0_id": auth0_id},
+                {"$set": {"summary": summary}}
+            )
+
+        response = await client.chat.completions.create(
+            model=MODEL_ID,
+            messages=chat_messages,
+            temperature=0.7
+        )
+        reply = response.choices[0].message.content
+
+        assistant_message = {
+            "chat_id": chat_id,
+            "auth0_id": auth0_id,
+            "username": username,
+            "email": email,
+            "role": "assistant",
+            "content": reply,
+            "timestamp": datetime.utcnow()
+        }
+        await messages_collection.insert_one(assistant_message)
+
+        await conversations_collection.update_one(
+            {"chat_id": chat_id, "auth0_id": auth0_id},
+            {"$set": {"updated_at": datetime.utcnow()}}
+        )
+
+        history_cursor = messages_collection.find({"chat_id": chat_id}).sort("timestamp", 1)
+        history = [{"role": m["role"], "content": m["content"]} async for m in history_cursor]
+
+        # Record successful request ONLY after everything succeeds
+        record_request(f"chat:{user_key}")
+
+        return {"response": reply, "chat_id": chat_id, "history": history}
+
+    except Exception as e:
+        import logging
+        logging.error(f"Chat error for user {user['auth0_id']}: {str(e)}")
+        raise HTTPException(status_code=500, detail="An error occurred processing your request")
+
+
+
+# ========== CONVERSATION MANAGEMENT ==========
+@app.get("/conversations")
+async def list_conversations(user: dict = Depends(get_current_user)):
+    auth0_id = user["auth0_id"]
+    cursor = conversations_collection.find({"auth0_id": auth0_id})
+    conversations = []
+    async for convo in cursor:
+        conversations.append({
+            "chat_id": convo["chat_id"],
+            "summary": convo.get("summary", convo["chat_id"][:8]),
+            "created_at": convo.get("created_at", "").isoformat() if "created_at" in convo else "",
+            "updated_at": convo.get("updated_at", "").isoformat() if "updated_at" in convo else "",
+        })
+    conversations.sort(key=lambda c: c["updated_at"], reverse=True)
+    return conversations
+
+@app.get("/conversation/{chat_id}")
+async def get_conversation(chat_id: str, user: dict = Depends(get_current_user)):
+    validate_chat_id(chat_id)
+    auth0_id = user["auth0_id"]
+    
+    convo = await conversations_collection.find_one({"chat_id": chat_id, "auth0_id": auth0_id})
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    
+    messages_cursor = messages_collection.find({"chat_id": chat_id, "auth0_id": auth0_id}).sort("timestamp", 1)
+    return [{"role": m["role"], "content": m["content"]} async for m in messages_cursor]
+
+@app.delete("/conversation/{chat_id}")
+async def delete_conversation(chat_id: str, user: dict = Depends(get_current_user)):
+    validate_chat_id(chat_id)
+    auth0_id = user["auth0_id"]
+    
+    result = await conversations_collection.delete_one({"chat_id": chat_id, "auth0_id": auth0_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Conversation not found or unauthorized.")
+    
+    await messages_collection.delete_many({"chat_id": chat_id, "auth0_id": auth0_id})
+    return {"message": "Conversation and its messages deleted successfully."}
+
+async def summarize_prompt(text):
+    response = await client.chat.completions.create(
+        model=SUMMARIZE_MODEL_ID,
         messages=[
             {"role": "system", "content": "Give a 4-word title to this message"},
             {"role": "user", "content": text}
@@ -111,159 +436,9 @@ def summarize_prompt(text):
     )
     return response.choices[0].message.content.strip().strip('"')
 
-def append_to_csv(username, chat_id, summary, messages_to_append):
-    user_dir = get_user_dir(username)
-    csv_path = os.path.join(user_dir, "conversations.csv")
 
-    write_header = not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0
 
-    with open(csv_path, "a", newline='', encoding="utf-8") as csvfile:
-        writer = csv.writer(csvfile)
-        if write_header:
-            writer.writerow(["username", "chat_id", "summary", "timestamp", "role", "message"])
-        for msg in messages_to_append:
-            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-            writer.writerow([username, chat_id, summary, timestamp, msg["role"], msg["content"]])
 
-# ========== AUTH ENDPOINTS ==========
-@app.post("/register")
-def register(user: User):
-    db = load_users()
-    if user.username in db.get("users", {}):
-        raise HTTPException(status_code=400, detail="Username already exists")
-
-    if "users" not in db:
-        db["users"] = {}
-
-    db["users"][user.username] = {"password": get_password_hash(user.password)}
-    save_users(db)
-    return {"message": "User registered successfully"}
-
-@app.post("/token", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    db = load_users()
-    user_record = db["users"].get(form_data.username)
-    if not user_record or not verify_password(form_data.password, user_record["password"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    access_token = create_access_token(
-        data={"sub": form_data.username},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-# ========== CHAT ENDPOINT ==========
-@app.post("/chat/start")
-def start_chat(username: str = Depends(get_current_user)):
-    user_dir = get_user_dir(username)
-    chat_id = f"{uuid.uuid4().hex[:8]}.json"
-    path = os.path.join(user_dir, chat_id)
-
-    assistant_welcome = {"role": "assistant", "content": "Hi! Welcome to ALAASKA. How can I help you today?"}
-
-    messages = [assistant_welcome]
-    json.dump(messages, open(path, "w"), indent=2)
-
-    return {"response": assistant_welcome["content"], "chat_id": chat_id, "history": messages}
-
-@app.post("/chat")
-def chat(req: ChatRequest, username: str = Depends(get_current_user)):
-    user_dir = get_user_dir(username)
-
-    system_message = {
-    "role": "system",
-    "content": (
-        "You are ALAASKA, a supportive tutor. Your job is to guide the user to think critically and find the solution on their own."
-        "Identify the student's level with guiding questions and avoid giving the final solution."
-        "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios."
-        "Only focus on academic discussions."
-    )
-}
-
-    if req.chat_id:
-        path = os.path.join(user_dir, req.chat_id)
-        messages = json.load(open(path)) if os.path.exists(path) else []
-
-        meta_path = path.replace(".json", "_meta.json")
-        if os.path.exists(meta_path):
-            with open(meta_path) as f:
-                meta = json.load(f)
-            summary = meta.get("summary", "")
-        else:
-            summary = ""
-    else:
-        chat_id = f"{uuid.uuid4().hex[:8]}.json"
-        path = os.path.join(user_dir, chat_id)
-        assistant_welcome = {"role": "assistant", "content": "Hi! Welcome to ALAASKA How can I help you today?"}
-        messages = [assistant_welcome]
-        summary = ""
-
-    api_messages = [system_message] + messages
-
-    messages.append({"role": "user", "content": req.message})
-
-    # Generate summary on first user message if needed
-    if summary == "" and len(messages) == 2:  # assistant + user
-        summary = summarize_prompt(req.message)
-        meta = {
-            "summary": summary,
-            "created_at": datetime.utcnow().strftime("%H:%M on %d-%m-%Y")
-        }
-        meta_path = path.replace(".json", "_meta.json")
-        with open(meta_path, "w") as f:
-            json.dump(meta, f)
-
-    response = client.chat.completions.create(
-        model= MODEL_ID, #"gpt-4o"
-        messages=api_messages + [{"role": "user", "content": req.message}],
-        temperature=0.7
-    )
-
-    reply = response.choices[0].message.content
-    messages.append({"role": "assistant", "content": reply})
-
-    append_to_csv(username, os.path.basename(path), summary, messages[-2:])
-    json.dump(messages, open(path, "w"), indent=2)
-
-    return {"response": reply, "chat_id": os.path.basename(path), "history": messages}
-
-# ========== CONVERSATION MGMT ==========
-@app.get("/conversations")
-def list_conversations(username: str = Depends(get_current_user)):
-    user_dir = get_user_dir(username)
-    chat_files = [f for f in os.listdir(user_dir) if f.endswith(".json") and not f.endswith("_meta.json")]
-    conversations = []
-    for f in chat_files:
-        meta_path = os.path.join(user_dir, f.replace(".json", "_meta.json"))
-        if os.path.exists(meta_path):
-            with open(meta_path) as mf:
-                meta = json.load(mf)
-            conversations.append({
-                "chat_id": f,
-                "summary": meta.get("summary", f[:8]),
-                "created_at": meta.get("created_at", "")
-            })
-        else:
-            conversations.append({
-                "chat_id": f,
-                "summary": f[:8],
-                "created_at": ""
-            })
-    return conversations
-
-@app.get("/conversation/{chat_id}")
-def get_conversation(chat_id: str, username: str = Depends(get_current_user)):
-    path = os.path.join(get_user_dir(username), chat_id)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Not found")
-    return json.load(open(path))
-
-@app.delete("/conversation/{chat_id}")
-def delete_conversation(chat_id: str, username: str = Depends(get_current_user)):
-    path = os.path.join(get_user_dir(username), chat_id)
-    if os.path.exists(path):
-        os.remove(path)
-        return {"message": "Deleted"}
-    raise HTTPException(status_code=404, detail="Not found")
 
 
 
