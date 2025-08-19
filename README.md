@@ -137,9 +137,9 @@ sudo ufw deny 27017  # MongoDB internal only
 ### 2.5 Start Application (Testing)
 ```bash
 # Terminal 1 - Backend
-cd alaaska_app/backend
+cd alaaska_app
 source alaaska_env/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 # Terminal 2 - Frontend  
 cd alaaska_app/frontend
