@@ -557,7 +557,8 @@ function App() {
                     zIndex: 10,
                   }}
                   onClick={() => {
-                    logout({ returnTo: window.location.origin });
+                    /* logout({ returnTo: window.location.origin }); --- UPDATED TO AVOID REDIRECT TO LOCALHOST AND CONNECTION ISSUE */
+                    logout({ returnTo: 'https://e5-cse-alaaska.vmhost.psu.edu' });
                   }}
                 >
                   Logout
