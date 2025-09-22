@@ -287,7 +287,7 @@ function App() {
         try {
           await handleApiCall(async (forceRefresh = false) => {
             const token = await validateAndGetToken(forceRefresh);
-            await axios.delete(`${BACKEND_URL}/conversation/${idToDelete}`, {
+            await axios.put(`${BACKEND_URL}/conversation/${idToDelete}/delete`, {} ,{
               headers: { Authorization: `Bearer ${token}` },
               withCredentials: true
             });

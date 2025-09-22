@@ -5,7 +5,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from collections import defaultdict
 from typing import Dict, List
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from jose import jwt
 from contextlib import asynccontextmanager
 import logging
@@ -192,7 +192,7 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(http_bea
             "auth0_id": user_id,
             "username": name,
             "email": email,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc)
         }
         await users_collection.insert_one(user_doc)
     else:
@@ -281,13 +281,14 @@ async def start_chat(user: dict = Depends(get_current_user), user_key: str = Dep
         "username": username,
         "email": email,
         "summary": "",
-        "created_at": datetime.utcnow(),
-        "updated_at": datetime.utcnow(),
+        "status": "active", #Unless a conversation is deleted it is active
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
     })
 
     await messages_collection.insert_many([
-        {**system_message, "chat_id": chat_id, "timestamp": datetime.utcnow(), "auth0_id": auth0_id, "username": username, "email": email},
-        {**assistant_welcome, "chat_id": chat_id, "timestamp": datetime.utcnow(), "auth0_id": auth0_id, "username": username, "email": email},
+        {**system_message, "chat_id": chat_id, "timestamp": datetime.now(timezone.utc), "auth0_id": auth0_id, "username": username, "email": email},
+        {**assistant_welcome, "chat_id": chat_id, "timestamp": datetime.now(timezone.utc), "auth0_id": auth0_id, "username": username, "email": email},
     ])
 
     # Record successful request AFTER everything succeeds
@@ -321,8 +322,9 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user), user_ke
                 "username": username,
                 "email": email,
                 "summary": "",
-                "created_at": datetime.utcnow(),
-                "updated_at": datetime.utcnow(),
+                "status": "active",  #Unless deleted, every conversation is active
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
             })
             summary = ""
 
@@ -333,7 +335,7 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user), user_ke
             "email": email,
             "role": "user",
             "content": req.message,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         }
         await messages_collection.insert_one(user_message)
 
@@ -361,13 +363,13 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user), user_ke
             "email": email,
             "role": "assistant",
             "content": reply,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         }
         await messages_collection.insert_one(assistant_message)
 
         await conversations_collection.update_one(
             {"chat_id": chat_id, "auth0_id": auth0_id},
-            {"$set": {"updated_at": datetime.utcnow()}}
+            {"$set": {"updated_at": datetime.now(timezone.utc)}}
         )
 
         history_cursor = messages_collection.find({"chat_id": chat_id}).sort("timestamp", 1)
@@ -386,10 +388,12 @@ async def chat(req: ChatRequest, user: dict = Depends(get_current_user), user_ke
 
 
 # ========== CONVERSATION MANAGEMENT ==========
-@app.get("/conversations")
+@app.get("/conversations") # Include docs without status field or not deleted
 async def list_conversations(user: dict = Depends(get_current_user)):
     auth0_id = user["auth0_id"]
-    cursor = conversations_collection.find({"auth0_id": auth0_id})
+    cursor = conversations_collection.find({"auth0_id": auth0_id,
+                                            "$or": [ {"status": {"$exists": False}}, {"status": {"$ne": "deleted"}}] 
+                                           })
     conversations = []
     async for convo in cursor:
         conversations.append({
@@ -406,24 +410,27 @@ async def get_conversation(chat_id: str, user: dict = Depends(get_current_user))
     validate_chat_id(chat_id)
     auth0_id = user["auth0_id"]
     
-    convo = await conversations_collection.find_one({"chat_id": chat_id, "auth0_id": auth0_id})
+    convo = await conversations_collection.find_one({"chat_id": chat_id, "auth0_id": auth0_id, 
+                                                     "$or": [{"status": {"$exists": False}}, {"status": {"$ne": "deleted"}}]
+                                                     })
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found.")
     
     messages_cursor = messages_collection.find({"chat_id": chat_id, "auth0_id": auth0_id}).sort("timestamp", 1)
     return [{"role": m["role"], "content": m["content"]} async for m in messages_cursor]
 
-@app.delete("/conversation/{chat_id}")
+@app.put("/conversation/{chat_id}/delete") # Add status deleted but keep conversation in DB
 async def delete_conversation(chat_id: str, user: dict = Depends(get_current_user)):
     validate_chat_id(chat_id)
     auth0_id = user["auth0_id"]
     
-    result = await conversations_collection.delete_one({"chat_id": chat_id, "auth0_id": auth0_id})
-    if result.deleted_count == 0:
+    result = await conversations_collection.update_one(
+        {"chat_id": chat_id, "auth0_id": auth0_id},
+        {"$set": {"status": "deleted", "updated_at": datetime.now(timezone.utc)}})
+    if result.modified_count == 0:
         raise HTTPException(status_code=404, detail="Conversation not found or unauthorized.")
     
-    await messages_collection.delete_many({"chat_id": chat_id, "auth0_id": auth0_id})
-    return {"message": "Conversation and its messages deleted successfully."}
+    return {"message": "Conversation marked as deleted successfully."}
 
 async def summarize_prompt(text):
     response = await client.chat.completions.create(
