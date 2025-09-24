@@ -1,4 +1,5 @@
 __pycache__/
+database_export*/
 .env
 *.pyc
 *test.py
