@@ -126,7 +126,7 @@ class ChatRequest(BaseModel):
     @field_validator('message')
     @classmethod
     def sanitize_message(cls, v: str) -> str:
-        return html.escape(v.strip())
+        return v.strip()
 
 # ========== UTILS ==========
 def get_auth0_jwks():
