@@ -3,7 +3,9 @@ import axios from "axios";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { useAuth0 } from "@auth0/auth0-react";
-import logo from './assets/alaaska_logo.png'; 
+import logo from './assets/alaaska_logo.png';
+import AssignmentsPage from './components/AssignmentsPage';
+import AdminPage from './components/AdminPage';
 
 const BACKEND_URL = '';
 
@@ -23,13 +25,12 @@ function App() {
   const [conversations, setConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
+  const [currentView, setCurrentView] = useState('chat');
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  
-  // Notification states
   const [notification, setNotification] = useState({ show: false, message: "", type: "error" });
   const [confirmation, setConfirmation] = useState({ show: false, message: "", onConfirm: null });
   
-  // Sidebar state: true = show full sidebar, false = show thin sidebar
   const [showFullSidebar, setShowFullSidebar] = useState(window.innerWidth > 768);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   
@@ -37,7 +38,6 @@ function App() {
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Notification helpers
   const showNotification = (message, type = "error") => {
     setNotification({ show: true, message, type });
     setTimeout(() => setNotification({ show: false, message: "", type: "error" }), 4000);
@@ -47,7 +47,10 @@ function App() {
     setConfirmation({ show: true, message, onConfirm });
   };
 
-  // Token validation helper
+  const getToken = async () => {
+    return await getAccessTokenSilently();
+  };
+
   const validateAndGetToken = useCallback(async (forceRefresh = false) => {
     if (!isAuthenticated) {
       throw new Error("Not authenticated");
@@ -55,7 +58,7 @@ function App() {
     
     try {
       const token = await getAccessTokenSilently({
-        cacheMode: forceRefresh ? 'off' : 'on'  // Always get fresh token to avoid cache issues
+        cacheMode: forceRefresh ? 'off' : 'on'
       });
       
       if (!token || token.length < 10) {
@@ -68,32 +71,28 @@ function App() {
     }
   }, [isAuthenticated, getAccessTokenSilently]);
 
-  // Helper function to handle 401 retries
   const handleApiCall = async (apiCallFn) => {
     try {
       return await apiCallFn();
     } catch (error) {
-      // If 401, wait a moment and try once more
       if (error.response?.status === 401) {
         console.log("Got 401, waiting and retrying...");
-        await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay
+        await new Promise(resolve => setTimeout(resolve, 100));
         return await apiCallFn();
       }
       throw error;
     }
   };
 
-  // Track window width and adjust sidebar behavior
   useEffect(() => {
     function handleResize() {
       const newWidth = window.innerWidth;
       setWindowWidth(newWidth);
       
-      // Desktop: start with full sidebar, Mobile: start with thin sidebar
       if (newWidth > 768) {
-        setShowFullSidebar(true); // Desktop shows full sidebar by default
+        setShowFullSidebar(true);
       } else {
-        setShowFullSidebar(false); // Mobile shows thin sidebar by default
+        setShowFullSidebar(false);
       }
     }
     
@@ -102,7 +101,6 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Scroll to the latest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -111,9 +109,9 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [typingText]);
 
-  // Load conversations when authenticated
   useEffect(() => {
     if (isAuthenticated) {
+      checkAdminStatus();
       const loadConversations = async () => {
         try {
           const token = await validateAndGetToken();
@@ -125,12 +123,24 @@ function App() {
           });
           setConversations(res.data);
         } catch (err) {
-          // If unauthorized, do nothing since Auth0 manages login state
+          // Ignore
         }
       };
       loadConversations();
     }
-  }, [isAuthenticated, getAccessTokenSilently, validateAndGetToken]);
+  }, [isAuthenticated, validateAndGetToken]);
+
+  const checkAdminStatus = async () => {
+    try {
+      const token = await getAccessTokenSilently();
+      const res = await axios.get(`${BACKEND_URL}/admin/check`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setIsAdmin(res.data.is_admin);
+    } catch (err) {
+      setIsAdmin(false);
+    }
+  };
 
   useEffect(() => {
     if (inputRef.current) {
@@ -167,8 +177,6 @@ function App() {
       );
 
       setChatId(res.data.chat_id);
-      console.log("Received valid chat_id from backend:");
-      setChatId(res.data.chat_id);
       const assistantMessages = res.data.history.filter((m) => m.role === "assistant");
       const lastAssistantMsg = assistantMessages[assistantMessages.length - 1];
 
@@ -193,7 +201,7 @@ function App() {
           });
         }, 5);
       }
-      setChatId(res.data.chat_id);
+      
       if (messages.filter(m => m.role === "user").length === 0) {
         try {
           setTimeout(async () => {
@@ -202,7 +210,7 @@ function App() {
             setConversations(convRes.data);
           }, 1000);
         } catch (err) {
-          // Ignore refresh errors
+          // Ignore
         }
       }
       
@@ -309,7 +317,6 @@ function App() {
     );
   };
 
-  // Toggle between full and thin sidebar
   const toggleSidebar = () => {
     setShowFullSidebar(!showFullSidebar);
   };
@@ -333,14 +340,12 @@ function App() {
 
   return (
     <>
-      {/* Notification Toast */}
       {notification.show && (
         <div className={`notification notification-${notification.type}`}>
           {notification.message}
         </div>
       )}
 
-      {/* Confirmation Modal */}
       {confirmation.show && (
         <div className="confirmation-overlay">
           <div className="confirmation-modal">
@@ -367,7 +372,6 @@ function App() {
       )}
 
       <div className="app-wrapper">
-        {/* Thin Sidebar - Show when showFullSidebar is false */}
         {!showFullSidebar && (
           <div className="thin-sidebar">
             <button
@@ -376,12 +380,10 @@ function App() {
               className="thin-sidebar-button toggle-button"
               title="Open full sidebar"
             >
-              {/* Default sidebar nav icon [| ] - less bold */}
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" className="default-icon">
               <rect x="4" y="6" width="16" height="12" stroke="currentColor" strokeWidth="1.0" fill="none" rx="1"/>
               <line x1="8" y1="8" x2="8" y2="16" stroke="currentColor" strokeWidth="1.0"/>
               </svg>
-              {/* Hover icon -->| - less bold */}
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" className="hover-icon">
                 <path d="M8 12h8M12 8l4 4-4 4" stroke="currentColor" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round"/>
                 <line x1="20" y1="6" x2="20" y2="18" stroke="currentColor" strokeWidth="1.0"/>
@@ -410,7 +412,6 @@ function App() {
           </div>
         )}
 
-        {/* Full Sidebar - Show when showFullSidebar is true */}
         {showFullSidebar && (
           <div className={`sidebar ${isMobile ? "sidebar-mobile" : ""}`}>
             <div className="sidebar-top">
@@ -421,12 +422,10 @@ function App() {
                   className="close-sidebar-button toggle-button sidebar-toggle-left"
                   title="Hide sidebar"
                 >
-                  {/* Default sidebar nav icon [| ] - 1.7x bigger, less bold */}
                   <svg width="36" height="36" viewBox="0 0 24 24" fill="none" className="default-icon">
                     <rect x="4" y="6" width="16" height="12" stroke="currentColor" strokeWidth="0.5" fill="none" rx="1"/>
                     <line x1="8" y1="8" x2="8" y2="16" stroke="currentColor" strokeWidth="0.5"/>
                   </svg>
-                  {/* Hover icon |<-- - less bold */}
                   <svg width="34" height="34" viewBox="0 0 24 24" fill="none" className="hover-icon">
                     <line x1="4" y1="6" x2="4" y2="18" stroke="currentColor" strokeWidth="1.0"/>
                     <path d="M16 12H8M12 8l-4 4 4 4" stroke="currentColor" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round"/>
@@ -501,17 +500,95 @@ function App() {
           </div>
         )}
 
-        {/* Overlay for mobile when full sidebar is open */}
         {isMobile && showFullSidebar && (
           <div className="sidebar-overlay" onClick={toggleSidebar}></div>
         )}
 
-        {/* Content Area */}
         <div className={`content-area ${showFullSidebar && !isMobile ? 'with-full-sidebar' : ''} ${!showFullSidebar ? 'with-thin-sidebar' : ''}`}>
           <div className="top-bar">
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <button
+                onClick={() => setCurrentView('chat')}
+                style={{
+                  background: currentView === 'chat' ? 'lightseagreen' : 'transparent',
+                  color: currentView === 'chat' ? 'white' : 'gray',
+                  border: '1px solid #e0e0e0',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Chat
+              </button>
+              <button
+                onClick={() => setCurrentView('assignments')}
+                style={{
+                  background: currentView === 'assignments' ? 'lightseagreen' : 'transparent',
+                  color: currentView === 'assignments' ? 'white' : 'gray',
+                  border: '1px solid #e0e0e0',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Assignments
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setCurrentView('admin')}
+                  style={{
+                    background: currentView === 'admin' ? 'lightseagreen' : 'transparent',
+                    color: currentView === 'admin' ? 'white' : 'gray',
+                    border: '1px solid #e0e0e0',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  Admin
+                </button>
+              )}
+              
+              {/* Initialize Super Admin Button */}
+              {user?.email === 'gvp5349@psu.edu' && !isAdmin && (
+                <button
+                  onClick={async () => {
+                    try {
+                      const token = await getAccessTokenSilently();
+                      const res = await axios.post(`${BACKEND_URL}/admin/initialize`, {}, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      });
+                      showNotification('Super admin initialized!', 'success');
+                      checkAdminStatus();
+                    } catch (err) {
+                      console.error('Initialize error:', err);
+                      showNotification(err.response?.data?.detail || 'Failed to initialize', 'error');
+                    }
+                  }}
+                  style={{
+                    background: '#f39c12',
+                    color: 'white',
+                    border: 'none',
+                    padding: '0.5rem 1rem',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '600'
+                  }}
+                >
+                  🔑 Initialize Super Admin
+                </button>
+              )}
+            </div>
+
             <h3 className="top-bar-title">
-              Study with ALAASKA through Microlearning
+              {currentView === 'chat' && 'Study with ALAASKA through Microlearning'}
+              {currentView === 'assignments' && 'My Assignments'}
+              {currentView === 'admin' && 'Admin Panel'}
             </h3>
+
             <div
               style={{
                 position: "relative",
@@ -565,90 +642,95 @@ function App() {
               )}
             </div>
           </div>
-
-          <div className="container">
-            <div className="main">
-              <div className="chatbox">
-                <div className="messages">
-                  <div className="messages-inner">
-                    {messages
-                      .filter((msg) => msg.role !== "system")
-                      .map((msg, i) => (
-                        <div
-                          key={i}
-                          className={`message ${
-                            msg.role === "user" ? "user-message" : "assistant-message"
-                          }`}
-                        >
-                          {msg.role === "assistant" ? (
-                            <div
-                              dangerouslySetInnerHTML={{
-                                __html: DOMPurify.sanitize(marked.parse(msg.content || "")),
-                              }}
-                            />
-                          ) : (
-                            msg.content
-                          )}
-                        </div>
-                      ))}
-                    {typingText ? (
-                      <div className="message assistant-message">
-                        <span
-                          dangerouslySetInnerHTML={{
-                            __html: DOMPurify.sanitize(marked.parse(typingText)),
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      isLoading && (
-                        <div className="message assistant-message">
-                          <div className="typing-indicator-with-logo">
-                            <img src={logo} alt="Alaaska Logo" className="spinning-logo" />
-                            <span className="typing-text">typing...</span>
+          {currentView === 'admin' ? (
+            <AdminPage getToken={getToken} />
+          ) : currentView === 'assignments' ? (
+            <AssignmentsPage getToken={getToken} />
+          ) : (
+            <div className="container">
+              <div className="main">
+                <div className="chatbox">
+                  <div className="messages">
+                    <div className="messages-inner">
+                      {messages
+                        .filter((msg) => msg.role !== "system")
+                        .map((msg, i) => (
+                          <div
+                            key={i}
+                            className={`message ${
+                              msg.role === "user" ? "user-message" : "assistant-message"
+                            }`}
+                          >
+                            {msg.role === "assistant" ? (
+                              <div
+                                dangerouslySetInnerHTML={{
+                                  __html: DOMPurify.sanitize(marked.parse(msg.content || "")),
+                                }}
+                              />
+                            ) : (
+                              msg.content
+                            )}
                           </div>
+                        ))}
+                      {typingText ? (
+                        <div className="message assistant-message">
+                          <span
+                            dangerouslySetInnerHTML={{
+                              __html: DOMPurify.sanitize(marked.parse(typingText)),
+                            }}
+                          />
                         </div>
-                      )
-                    )}
-                    <div ref={messagesEndRef} />
+                      ) : (
+                        isLoading && (
+                          <div className="message assistant-message">
+                            <div className="typing-indicator-with-logo">
+                              <img src={logo} alt="Alaaska Logo" className="spinning-logo" />
+                              <span className="typing-text">typing...</span>
+                            </div>
+                          </div>
+                        )
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
                   </div>
-                </div>
 
-                <div className="input-container">
-                  <textarea
-                    ref={inputRef}
-                    placeholder="Ask something..."
-                    value={userInput}
-                    onChange={(e) => setUserInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage();
-                      }
-                    }}
-                    rows={3}
-                    maxLength={1000}
-                    aria-label="Type your message"
-                  />
-                  <button
-                    className="send-button"
-                    onClick={sendMessage}
-                    title="Send"
-                    aria-label="Send message"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      fill="currentColor"
-                      viewBox="0 0 16 16"
+                  <div className="input-container">
+                    <textarea
+                      ref={inputRef}
+                      placeholder="Ask something..."
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          sendMessage();
+                        }
+                      }}
+                      rows={3}
+                      maxLength={1000}
+                      aria-label="Type your message"
+                    />
+                    <button
+                      className="send-button"
+                      onClick={sendMessage}
+                      title="Send"
+                      aria-label="Send message"
                     >
-                      <path d="M15.854.146a.5.5 0 0 1 .11.54l-6 14a.5.5 0 0 1-.948-.032l-2-6-6-2a.5.5 0 0 1 .032-.948l14-6a.5.5 0 0 1 .806.44zM6.832 8.065l1.476 4.427 4.318-10.078L6.832 8.065z" />
-                    </svg>
-                  </button>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        fill="currentColor"
+                        viewBox="0 0 16 16"
+                      >
+                        <path d="M15.854.146a.5.5 0 0 1 .11.54l-6 14a.5.5 0 0 1-.948-.032l-2-6-6-2a.5.5 0 0 1 .032-.948l14-6a.5.5 0 0 1 .806.44zM6.832 8.065l1.476 4.427 4.318-10.078L6.832 8.065z" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="footer">
             ALAASKA: Adaptive Learning for All through AI-Powered Student Knowledge Assessment.

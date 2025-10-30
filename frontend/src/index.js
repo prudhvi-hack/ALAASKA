@@ -17,9 +17,10 @@ root.render(
       redirect_uri: window.location.origin,
       audience: audience, // Add this - crucial for getting proper JWT tokens
       scope: "openid profile email", 
-      useRefreshTokens:true,
-      cacheLocation:"memory"
+  
     }}
+    useRefreshTokens={true}         // Move OUT of authorizationParams
+    cacheLocation="localstorage"
   >
     <App />
   </Auth0Provider>
