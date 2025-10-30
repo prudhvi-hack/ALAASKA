@@ -7,7 +7,7 @@ import logo from './assets/alaaska_logo.png';
 import AssignmentsPage from './components/AssignmentsPage';
 import AdminPage from './components/AdminPage';
 
-const BACKEND_URL = '';
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
 
 function App() {
   const { 
@@ -37,6 +37,8 @@ function App() {
   const [typingText, setTypingText] = useState("");
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const tokenRef = useRef(null);
+  const tokenExpiryRef = useRef(null);
 
   const showNotification = (message, type = "error") => {
     setNotification({ show: true, message, type });
@@ -47,37 +49,69 @@ function App() {
     setConfirmation({ show: true, message, onConfirm });
   };
 
-  const getToken = async () => {
-    return await getAccessTokenSilently();
-  };
+  // Centralized token handling with caching
+  const getToken = useCallback(async () => {
+    try {
+      const now = Date.now();
+      if (tokenRef.current && tokenExpiryRef.current && (tokenExpiryRef.current - now) > 300000) {
+        return tokenRef.current;
+      }
+
+      const token = await getAccessTokenSilently({
+        authorizationParams: {
+          audience: process.env.REACT_APP_AUTH0_API_AUDIENCE || process.env.REACT_APP_AUTH0_AUDIENCE,
+        },
+      });
+
+      tokenRef.current = token;
+      tokenExpiryRef.current = now + 3600000; // 1 hour cache
+      return token;
+    } catch (error) {
+      console.error('Error getting token:', error);
+      if (error.error === 'login_required' || error.error === 'consent_required') {
+        await loginWithRedirect();
+      }
+      throw error;
+    }
+  }, [getAccessTokenSilently, loginWithRedirect]);
 
   const validateAndGetToken = useCallback(async (forceRefresh = false) => {
     if (!isAuthenticated) {
       throw new Error("Not authenticated");
     }
-    
     try {
-      const token = await getAccessTokenSilently({
-        cacheMode: forceRefresh ? 'off' : 'on'
-      });
-      
-      if (!token || token.length < 10) {
-        throw new Error("Invalid token received");
+      if (forceRefresh) {
+        tokenRef.current = null;
+        tokenExpiryRef.current = null;
       }
-      return token;
+      return await getToken();
     } catch (error) {
       console.error("Token validation failed:", error);
       throw new Error("Authentication failed");
     }
-  }, [isAuthenticated, getAccessTokenSilently]);
+  }, [isAuthenticated, getToken]);
+
+  const withAuthConfig = async (forceRefresh = false, extra = {}) => {
+    const token = await validateAndGetToken(forceRefresh);
+    return {
+      withCredentials: true,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(extra.headers || {})
+      },
+      ...extra
+    };
+  };
 
   const handleApiCall = async (apiCallFn) => {
     try {
       return await apiCallFn();
     } catch (error) {
       if (error.response?.status === 401) {
-        console.log("Got 401, waiting and retrying...");
-        await new Promise(resolve => setTimeout(resolve, 100));
+        tokenRef.current = null;
+        tokenExpiryRef.current = null;
+        await new Promise(resolve => setTimeout(resolve, 50));
         return await apiCallFn();
       }
       throw error;
@@ -88,14 +122,8 @@ function App() {
     function handleResize() {
       const newWidth = window.innerWidth;
       setWindowWidth(newWidth);
-      
-      if (newWidth > 768) {
-        setShowFullSidebar(true);
-      } else {
-        setShowFullSidebar(false);
-      }
+      setShowFullSidebar(newWidth > 768);
     }
-    
     window.addEventListener("resize", handleResize);
     handleResize();
     return () => window.removeEventListener("resize", handleResize);
@@ -109,38 +137,49 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [typingText]);
 
+  // Handle assignment chat deep-links
   useEffect(() => {
-    if (isAuthenticated) {
-      checkAdminStatus();
-      const loadConversations = async () => {
-        try {
-          const token = await validateAndGetToken();
-          const res = await axios.get(`${BACKEND_URL}/conversations`, {
-            headers: { 
-              Authorization: `Bearer ${token}`
-            },
-            withCredentials: true
-          });
-          setConversations(res.data);
-        } catch (err) {
-          // Ignore
-        }
-      };
-      loadConversations();
+    const urlParams = new URLSearchParams(window.location.search);
+    const chatIdFromUrl = urlParams.get('chat_id');
+    const isAssignment = urlParams.get('assignment') === 'true';
+    if (chatIdFromUrl && isAssignment && isAuthenticated) {
+      setCurrentView('chat');
+      loadConversation(chatIdFromUrl);
+      window.history.replaceState({}, document.title, '/');
     }
-  }, [isAuthenticated, validateAndGetToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
-  const checkAdminStatus = async () => {
-    try {
-      const token = await getAccessTokenSilently();
-      const res = await axios.get(`${BACKEND_URL}/admin/check`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setIsAdmin(res.data.is_admin);
-    } catch (err) {
-      setIsAdmin(false);
-    }
-  };
+  // Initial conversations + admin status
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const loadConversations = async () => {
+      try {
+        await handleApiCall(async () => {
+          const config = await withAuthConfig(false);
+          const res = await axios.get(`${BACKEND_URL}/conversations`, config);
+          setConversations(res.data);
+        });
+      } catch (err) {
+        console.error('Failed to load conversations:', err);
+      }
+    };
+
+    const checkAdminStatus = async () => {
+      try {
+        const config = await withAuthConfig(false);
+        const res = await axios.get(`${BACKEND_URL}/admin/check`, config);
+        setIsAdmin(!!res.data.is_admin);
+      } catch {
+        setIsAdmin(false);
+      }
+    };
+
+    loadConversations();
+    checkAdminStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (inputRef.current) {
@@ -156,112 +195,79 @@ function App() {
       return;
     }
 
+    const text = userInput;
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    setUserInput("");
+    setIsLoading(true);
+
     try {
-      const token = await validateAndGetToken(false);
-      
-      const userMsg = { role: "user", content: userInput };
-      setMessages((prevMessages) => [...prevMessages, userMsg]);
-      setUserInput("");
-      setIsLoading(true);
-    
-      const res = await axios.post(
-        `${BACKEND_URL}/chat`,
-        { message: userInput, chat_id: chatId },
-        { 
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          withCredentials: true
-        }
-      );
+      const res = await handleApiCall(async () => {
+        const config = await withAuthConfig(false);
+        return axios.post(`${BACKEND_URL}/chat`, { message: text, chat_id: chatId }, config);
+      });
 
       setChatId(res.data.chat_id);
+
       const assistantMessages = res.data.history.filter((m) => m.role === "assistant");
       const lastAssistantMsg = assistantMessages[assistantMessages.length - 1];
 
       if (lastAssistantMsg) {
-        const fullReply = lastAssistantMsg.content;
+        const fullReply = lastAssistantMsg.content || "";
         let i = 0;
         setTypingText("");
-
         const typeInterval = setInterval(() => {
           setTypingText((prev) => {
             const next = prev + fullReply[i];
             i++;
             if (i >= fullReply.length) {
               clearInterval(typeInterval);
-              setMessages((prevMessages) => [
-                ...prevMessages,
-                { role: "assistant", content: fullReply },
-              ]);
+              setMessages((prevMsgs) => [...prevMsgs, { role: "assistant", content: fullReply }]);
               setTypingText("");
             }
             return next;
           });
         }, 5);
       }
-      
+
       if (messages.filter(m => m.role === "user").length === 0) {
-        try {
-          setTimeout(async () => {
-            const updatedToken = await validateAndGetToken(false);
-            const convRes = await axios.get(`${BACKEND_URL}/conversations`, { headers: { Authorization: `Bearer ${updatedToken}` }, withCredentials: true });
+        setTimeout(async () => {
+          try {
+            const config = await withAuthConfig(false);
+            const convRes = await axios.get(`${BACKEND_URL}/conversations`, config);
             setConversations(convRes.data);
-          }, 1000);
-        } catch (err) {
-          // Ignore
-        }
+          } catch {
+            // ignore
+          }
+        }, 1000);
       }
-      
     } catch (err) {
-      console.error("Message send failed");
-      if (err.response?.status === 401) {
-        showNotification("Session expired or unauthorized. Please log in again.");
-      } else {
-        showNotification("Failed to send message.");
-      }
+      console.error("Message send failed", err);
+      showNotification(err.response?.status === 401 ? "Session expired or unauthorized. Please log in again." : "Failed to send message.");
     } finally {
       setIsLoading(false);
     }
-  };  
+  };
 
   const startNewChat = async () => {
     if (!isAuthenticated) {
       showNotification("Please login first.");
       return;
     }
-
     try {
-      const token = await validateAndGetToken(false);
-      
-      const res = await axios.post(
-        `${BACKEND_URL}/chat/start`,
-        {},
-        {
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          withCredentials: true
-        }
-      );
-
+      const res = await handleApiCall(async () => {
+        const config = await withAuthConfig(false);
+        return axios.post(`${BACKEND_URL}/chat/start`, {}, config);
+      });
       const newChatId = res.data.chat_id;
       setChatId(newChatId);
       setUserInput("");
-      setMessages([
-        {
-          role: "assistant",
-          content: "Hi! Welcome to ALAASKA. How can I help you today?",
-        },
-      ]);
+      setMessages([{ role: "assistant", content: "Hi! Welcome to ALAASKA. How can I help you today?" }]);
       setConversations((prevConvos) => [
         { chat_id: newChatId, summary: "New Chat" },
         ...prevConvos.filter((c) => c.chat_id !== newChatId),
       ]);
     } catch (err) {
-      console.error("Error starting a new chat!");
+      console.error("Error starting a new chat!", err);
       showNotification("Failed to start a new chat.");
     }
   };
@@ -271,17 +277,15 @@ function App() {
       showNotification("Please login first.");
       return;
     }
-  
     try {
-      await handleApiCall(async (forceRefresh = false) => {
-        const token = await validateAndGetToken(forceRefresh);
-        const res = await axios.get(`${BACKEND_URL}/conversation/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          withCredentials: true
-        });
-        setMessages(res.data);
-        setChatId(id);
+      const res = await handleApiCall(async () => {
+        const config = await withAuthConfig(false);
+        return axios.get(`${BACKEND_URL}/conversation/${id}`, config);
       });
+      const displayMessages = (Array.isArray(res.data) ? res.data : []).filter(msg => msg.role !== 'system');
+      setMessages(displayMessages);
+      setChatId(id);
+      if (windowWidth <= 768) setShowFullSidebar(false);
     } catch (err) {
       console.error("Error loading conversation!", err);
       showNotification("Failed to load conversation.");
@@ -289,32 +293,23 @@ function App() {
   };
 
   const deleteConversation = (idToDelete) => {
-    showConfirmation(
-      "Are you sure you want to delete this conversation?",
-      async () => {
-        try {
-          await handleApiCall(async (forceRefresh = false) => {
-            const token = await validateAndGetToken(forceRefresh);
-            await axios.put(`${BACKEND_URL}/conversation/${idToDelete}/delete`, {} ,{
-              headers: { Authorization: `Bearer ${token}` },
-              withCredentials: true
-            });
-          });
-  
-          if (chatId === idToDelete) {
-            setMessages([]);
-            setChatId(null);
-          }
-          setConversations(
-            conversations.filter((item) => item.chat_id !== idToDelete)
-          );
-          showNotification("Conversation deleted successfully.", "success");
-        } catch (err) {
-          console.error("Error deleting conversation!");
-          showNotification("Failed to delete the conversation.");
+    showConfirmation("Are you sure you want to delete this conversation?", async () => {
+      try {
+        await handleApiCall(async () => {
+          const config = await withAuthConfig(false);
+          return axios.put(`${BACKEND_URL}/conversation/${idToDelete}/delete`, {}, config);
+        });
+        if (chatId === idToDelete) {
+          setMessages([]);
+          setChatId(null);
         }
+        setConversations((prev) => prev.filter((item) => item.chat_id !== idToDelete));
+        showNotification("Conversation deleted successfully.", "success");
+      } catch (err) {
+        console.error("Error deleting conversation!", err);
+        showNotification("Failed to delete the conversation.");
       }
-    );
+    });
   };
 
   const toggleSidebar = () => {
@@ -381,8 +376,8 @@ function App() {
               title="Open full sidebar"
             >
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" className="default-icon">
-              <rect x="4" y="6" width="16" height="12" stroke="currentColor" strokeWidth="1.0" fill="none" rx="1"/>
-              <line x1="8" y1="8" x2="8" y2="16" stroke="currentColor" strokeWidth="1.0"/>
+                <rect x="4" y="6" width="16" height="12" stroke="currentColor" strokeWidth="1.0" fill="none" rx="1"/>
+                <line x1="8" y1="8" x2="8" y2="16" stroke="currentColor" strokeWidth="1.0"/>
               </svg>
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" className="hover-icon">
                 <path d="M8 12h8M12 8l4 4-4 4" stroke="currentColor" strokeWidth="1.0" strokeLinecap="round" strokeLinejoin="round"/>
@@ -552,17 +547,19 @@ function App() {
                 </button>
               )}
               
-              {/* Initialize Super Admin Button */}
               {user?.email === 'gvp5349@psu.edu' && !isAdmin && (
                 <button
                   onClick={async () => {
                     try {
-                      const token = await getAccessTokenSilently();
-                      const res = await axios.post(`${BACKEND_URL}/admin/initialize`, {}, {
-                        headers: { Authorization: `Bearer ${token}` }
-                      });
+                      const config = await withAuthConfig(false);
+                      await axios.post(`${BACKEND_URL}/admin/initialize`, {}, config);
                       showNotification('Super admin initialized!', 'success');
-                      checkAdminStatus();
+                      // Refresh admin status
+                      try {
+                        const cfg = await withAuthConfig(false);
+                        const res = await axios.get(`${BACKEND_URL}/admin/check`, cfg);
+                        setIsAdmin(!!res.data.is_admin);
+                      } catch {}
                     } catch (err) {
                       console.error('Initialize error:', err);
                       showNotification(err.response?.data?.detail || 'Failed to initialize', 'error');
