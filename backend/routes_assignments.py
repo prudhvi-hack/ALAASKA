@@ -36,7 +36,9 @@ async def create_assignment_template(
         "questions": [
             {
                 "question_id": str(uuid.uuid4()),
-                "question_text": q.question_text,
+                "number": q.number,
+                "prompt_md": q.prompt_md,
+                "marks": float(q.marks),
                 "hints": q.hints or []
             }
             for q in request.questions
@@ -80,7 +82,7 @@ async def create_assignment(
         "template_id": request.template_id,
         "title": template["title"],
         "description": template["description"],
-        "questions": template["questions"],
+        "questions": template["questions"],  # Contains number, prompt_md, marks, hints
         "allowed_students": [email.lower() for email in request.allowed_students],
         "created_by": user["email"],
         "created_at": datetime.now(timezone.utc)
@@ -169,8 +171,13 @@ async def accept_assignment(assignment_id: str, auth: HTTPAuthorizationCredentia
     
     # Create a conversation for each question
     questions_with_chats = []
-    for idx, q in enumerate(assignment["questions"], 1):
+    for idx, q in enumerate(assignment["questions"]):
         chat_id = str(uuid.uuid4())
+        
+        # BACKWARD COMPATIBILITY: Handle old schema
+        question_number = q.get('number', str(idx + 1))
+        question_text = q.get('prompt_md', q.get('question_text', ''))
+        question_marks = q.get('marks', 0)
         
         # Prepare hints text
         hints_text = ""
@@ -187,14 +194,14 @@ async def accept_assignment(assignment_id: str, auth: HTTPAuthorizationCredentia
                     "Identify the student's level with guiding questions about the topic they are inquiring about."
                     "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
                     "Discuss only academic topics and nothing else."
-                    f"\n\nThe student needs to solve this assignment question:\n\nQuestion {idx}: {q['question_text']}{hints_text}"
+                    f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
                 )
             },
             {
                 "role": "assistant",
                 "content": f"""Hi! I'm here to help you work through this assignment question:
 
-**Question {idx}:** {q['question_text']}
+**Question {question_number}:** {question_text}
 
 Before we dive in, I'd like to understand your initial thoughts. What's your first impression of this question? What concepts or ideas come to mind when you read it?
 
@@ -207,7 +214,7 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
             "chat_id": chat_id,
             "user_id": user_id,
             "messages": initial_messages,
-            "summary": f"{assignment['title']} - Q{idx}",
+            "summary": f"{assignment['title']} - Q{question_number}",
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
             "is_deleted": False,
@@ -218,10 +225,12 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
         
         await conversations_collection.insert_one(conversation_doc)
         
-        # Add question with chat_id
+        # Add question with chat_id (normalize to new schema)
         questions_with_chats.append({
             "question_id": q["question_id"],
-            "question_text": q["question_text"],
+            "number": question_number,
+            "prompt_md": question_text,
+            "marks": question_marks,
             "hints": q.get("hints", []),
             "chat_id": chat_id,
             "student_solution": None,
@@ -317,6 +326,10 @@ async def get_question_chat(
         # Create chat_id and conversation now
         chat_id = str(uuid.uuid4())
         
+        # BACKWARD COMPATIBILITY
+        question_number = target_question.get('number', str(question_index + 1))
+        question_text = target_question.get('prompt_md', target_question.get('question_text', ''))
+        
         # Prepare hints text
         hints_text = ""
         if target_question.get('hints') and len(target_question['hints']) > 0:
@@ -332,14 +345,14 @@ async def get_question_chat(
                     "Identify the student's level with guiding questions about the topic they are inquiring about."
                     "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
                     "Discuss only academic topics and nothing else."
-                    f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_index + 1}: {target_question['question_text']}{hints_text}"
+                    f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
                 )
             },
             {
                 "role": "assistant",
                 "content": f"""Hi! I'm here to help you work through this assignment question:
 
-**Question {question_index + 1}:** {target_question['question_text']}
+**Question {question_number}:** {question_text}
 
 Before we dive in, I'd like to understand your initial thoughts. What's your first impression of this question? What concepts or ideas come to mind when you read it?
 
@@ -351,7 +364,7 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
             "chat_id": chat_id,
             "user_id": user_id,
             "messages": initial_messages,
-            "summary": f"{assignment['title']} - Q{question_index + 1}",
+            "summary": f"{assignment['title']} - Q{question_number}",
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
             "is_deleted": False,
@@ -380,13 +393,15 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
         
         return {
             "chat_id": chat_id,
-            "question_text": target_question["question_text"]
+            "prompt_md": question_text,
+            "number": question_number
         }
     
     # Chat already exists
     return {
         "chat_id": target_question["chat_id"],
-        "question_text": target_question["question_text"]
+        "prompt_md": target_question.get("prompt_md", target_question.get("question_text", "")),
+        "number": target_question.get("number", "")
     }
 
 @router.post("/assignments/{assignment_id}/questions/{question_id}/solution")
@@ -457,7 +472,8 @@ async def get_assignment_chats(assignment_id: str, auth: HTTPAuthorizationCreden
     for question in student_assignment.get("questions", []):
         chats.append({
             "question_id": question["question_id"],
-            "question_text": question["question_text"],
+            "number": question.get("number", ""),
+            "prompt_md": question.get("prompt_md", question.get("question_text", "")),
             "chat_id": question.get("chat_id")
         })
     

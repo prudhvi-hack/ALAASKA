@@ -12,6 +12,7 @@ export default function AssignmentsPage({ getToken }) {
 
   useEffect(() => {
     loadAssignments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAssignments = async () => {
@@ -65,7 +66,7 @@ export default function AssignmentsPage({ getToken }) {
     }
   };
 
-  const openQuestionChat = async (questionId, questionText) => {
+  const openQuestionChat = async (questionId, questionNumber) => {
     try {
       const token = await getToken();
       const res = await axios.get(
@@ -153,12 +154,35 @@ export default function AssignmentsPage({ getToken }) {
                   boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                 }}
               >
-                <h4 style={{ margin: '0 0 1rem 0', color: '#333' }}>
-                  Question {idx + 1}
-                </h4>
-                <p style={{ fontSize: '1.1rem', lineHeight: '1.6', marginBottom: '1rem' }}>
-                  {q.question_text}
-                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '1rem' }}>
+                  <h4 style={{ margin: 0, color: '#333' }}>
+                    Question {q.number || (idx + 1)}
+                  </h4>
+                  {q.marks && (
+                    <span style={{ 
+                      background: '#e3f2fd', 
+                      color: '#1976d2', 
+                      padding: '0.25rem 0.75rem', 
+                      borderRadius: '12px',
+                      fontSize: '0.85rem',
+                      fontWeight: '600'
+                    }}>
+                      {q.marks} {q.marks === 1 ? 'mark' : 'marks'}
+                    </span>
+                  )}
+                </div>
+                
+                <div 
+                  style={{ 
+                    fontSize: '1.1rem', 
+                    lineHeight: '1.6', 
+                    marginBottom: '1rem',
+                    whiteSpace: 'pre-wrap'
+                  }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: q.prompt_md || q.question_text || 'No question text available' 
+                  }}
+                />
                 
                 {q.hints && q.hints.length > 0 && (
                   <details style={{ marginBottom: '1rem' }}>
@@ -179,7 +203,7 @@ export default function AssignmentsPage({ getToken }) {
                 )}
 
                 <button
-                  onClick={() => openQuestionChat(q.question_id, q.question_text)}
+                  onClick={() => openQuestionChat(q.question_id, q.number || (idx + 1))}
                   style={{
                     padding: '0.75rem 1.5rem',
                     background: 'lightseagreen',

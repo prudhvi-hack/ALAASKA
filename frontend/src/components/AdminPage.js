@@ -16,11 +16,11 @@ function AdminPage({ getToken }) {
   // Admin Management State
   const [newAdminEmail, setNewAdminEmail] = useState('');
 
-  // Template Creation State
+  // Template Creation State - FIXED: using prompt_md and marks
   const [templateForm, setTemplateForm] = useState({
     title: '',
     description: '',
-    questions: [{ question_text: '', hints: [''] }]
+    questions: [{ number: '', prompt_md: '', marks: 1, hints: [''] }]
   });
 
   // Assignment Creation State
@@ -34,6 +34,7 @@ function AdminPage({ getToken }) {
     loadTemplates();
     loadAssignments();
     loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const showNotification = (message, type = 'success') => {
@@ -122,10 +123,11 @@ function AdminPage({ getToken }) {
     }
   };
 
+  // Add question - FIXED: includes marks field
   const addQuestion = () => {
     setTemplateForm({
       ...templateForm,
-      questions: [...templateForm.questions, { question_text: '', hints: [''] }]
+      questions: [...templateForm.questions, { number: '', prompt_md: '', marks: 1, hints: [''] }]
     });
   };
 
@@ -136,7 +138,7 @@ function AdminPage({ getToken }) {
 
   const updateQuestion = (index, field, value) => {
     const newQuestions = [...templateForm.questions];
-    newQuestions[index][field] = value;
+    newQuestions[index] = { ...newQuestions[index], [field]: value };
     setTemplateForm({ ...templateForm, questions: newQuestions });
   };
 
@@ -158,32 +160,76 @@ function AdminPage({ getToken }) {
     setTemplateForm({ ...templateForm, questions: newQuestions });
   };
 
-  const createTemplate = async () => {
-    if (!templateForm.title.trim() || !templateForm.description.trim()) {
-      showNotification('Please fill in title and description', 'error');
-      return;
+  const validateTemplate = (form) => {
+    const numRe = /^\d+(\.\d+)*$/;
+    const seen = new Set();
+    for (let i = 0; i < form.questions.length; i++) {
+      const q = form.questions[i];
+      if (!q.number || !q.number.trim()) {
+        return { ok: false, message: `Please enter a question number for question ${i + 1}.` };
+      }
+      const num = q.number.trim();
+      if (!numRe.test(num)) {
+        return { ok: false, message: `Invalid question number "${num}" at question ${i + 1}. Use formats like 1 or 1.1 or 2.3.4.` };
+      }
+      if (seen.has(num)) {
+        return { ok: false, message: `Duplicate question number "${num}". Each question number must be unique.` };
+      }
+      seen.add(num);
+      if (!q.prompt_md || !q.prompt_md.trim()) {
+        return { ok: false, message: `Please enter text for question ${num}.` };
+      }
+      if (!q.marks || q.marks <= 0) {
+        return { ok: false, message: `Please enter valid marks for question ${num}.` };
+      }
     }
+    if (!form.title.trim() || !form.description.trim()) {
+      return { ok: false, message: 'Please fill in title and description' };
+    }
+    return { ok: true };
+  };
 
-    if (templateForm.questions.some(q => !q.question_text.trim())) {
-      showNotification('All questions must have text', 'error');
+  const createTemplate = async () => {
+    const validation = validateTemplate(templateForm);
+    if (!validation.ok) {
+      showNotification(validation.message, 'error');
       return;
     }
 
     try {
       setLoading(true);
       const token = await getToken();
-      await axios.post(`${BACKEND_URL}/assignment-templates`, templateForm, {
+      
+      // Prepare payload with cleaned hints
+      const payload = {
+        title: templateForm.title,
+        description: templateForm.description,
+        questions: templateForm.questions.map(q => ({
+          number: q.number.trim(),
+          prompt_md: q.prompt_md,
+          marks: parseFloat(q.marks),
+          hints: q.hints.filter(h => h.trim() !== '')
+        }))
+      };
+
+      await axios.post(`${BACKEND_URL}/assignment-templates`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
       showNotification('Template created successfully', 'success');
       setTemplateForm({
         title: '',
         description: '',
-        questions: [{ question_text: '', hints: [''] }]
+        questions: [{ number: '', prompt_md: '', marks: 1, hints: [''] }]
       });
       loadTemplates();
     } catch (err) {
-      showNotification(err.response?.data?.detail || 'Failed to create template', 'error');
+      console.error('Create template error:', err.response?.data);
+      const errorMsg = err.response?.data?.detail 
+        ? (Array.isArray(err.response.data.detail) 
+            ? err.response.data.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join(', ')
+            : err.response.data.detail)
+        : 'Failed to create template';
+      showNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -363,14 +409,42 @@ function AdminPage({ getToken }) {
                       </button>
                     )}
                   </div>
+
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Question Number</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., 1 or 1.1 or 2.3.4"
+                      value={question.number}
+                      onChange={(e) => updateQuestion(qIdx, 'number', e.target.value)}
+                      className="admin-input"
+                    />
+                    <small style={{ color: '#666' }}>Required. Use numeric dot notation.</small>
+                  </div>
+
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Marks</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      placeholder="e.g., 10"
+                      value={question.marks}
+                      onChange={(e) => updateQuestion(qIdx, 'marks', e.target.value)}
+                      className="admin-input"
+                    />
+                  </div>
                   
-                  <textarea
-                    placeholder="Question text"
-                    value={question.question_text}
-                    onChange={(e) => updateQuestion(qIdx, 'question_text', e.target.value)}
-                    className="admin-textarea"
-                    rows="2"
-                  />
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Question Text (Markdown)</label>
+                    <textarea
+                      placeholder="Question text"
+                      value={question.prompt_md}
+                      onChange={(e) => updateQuestion(qIdx, 'prompt_md', e.target.value)}
+                      className="admin-textarea"
+                      rows="3"
+                    />
+                  </div>
 
                   <div className="hints-section">
                     <h5>Hints (optional)</h5>
