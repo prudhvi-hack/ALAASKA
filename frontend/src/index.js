@@ -20,7 +20,7 @@ root.render(
       scope: "openid profile email",
     }}
     useRefreshTokens={true}
-    cacheLocation="memory"
+    cacheLocation="localstorage"
   >
     <AuthProvider>
       <App />
