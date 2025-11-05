@@ -1,29 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api/axios';
 import '../styles/admin.css';
 
-const BACKEND_URL = '';
-
-function AdminPage({ getToken }) {
+function AdminPage() {
   const [activeTab, setActiveTab] = useState('admins');
   const [admins, setAdmins] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [assignments, setAssignments] = useState([]);
-  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
 
-  // Admin Management State
   const [newAdminEmail, setNewAdminEmail] = useState('');
 
-  // Template Creation State - FIXED: using prompt_md and marks
   const [templateForm, setTemplateForm] = useState({
     title: '',
     description: '',
     questions: [{ number: '', prompt_md: '', marks: 1, hints: [''] }]
   });
 
-  // Assignment Creation State
   const [assignmentForm, setAssignmentForm] = useState({
     template_id: '',
     allowed_students: ['']
@@ -33,7 +27,6 @@ function AdminPage({ getToken }) {
     loadAdmins();
     loadTemplates();
     loadAssignments();
-    loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -42,29 +35,30 @@ function AdminPage({ getToken }) {
     setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 4000);
   };
 
-  // ========== ADMIN MANAGEMENT ==========
   const loadAdmins = async () => {
     try {
-      const token = await getToken();
-      const res = await axios.get(`${BACKEND_URL}/admin/list`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await api.get('/admin/list');
       setAdmins(res.data.admins);
     } catch (err) {
-      console.error('Failed to load admins:', err);
       showNotification('Failed to load admins', 'error');
     }
   };
 
-  const loadUsers = async () => {
+  const loadTemplates = async () => {
     try {
-      const token = await getToken();
-      const res = await axios.get(`${BACKEND_URL}/admin/users`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUsers(res.data.users || []);
+      const res = await api.get('/assignment-templates');
+      setTemplates(res.data.templates || []);
     } catch (err) {
-      console.error('Failed to load users:', err);
+      console.error('Failed to load templates:', err);
+    }
+  };
+
+  const loadAssignments = async () => {
+    try {
+      const res = await api.get('/admin/assignments');
+      setAssignments(res.data.assignments || []);
+    } catch (err) {
+      console.error('Failed to load assignments:', err);
     }
   };
 
@@ -76,12 +70,8 @@ function AdminPage({ getToken }) {
 
     try {
       setLoading(true);
-      const token = await getToken();
-      await axios.post(`${BACKEND_URL}/admin/add`, 
-        { email: newAdminEmail },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      showNotification('Admin added successfully', 'success');
+      await api.post('/admin/add', { email: newAdminEmail });
+      showNotification('Admin added successfully');
       setNewAdminEmail('');
       loadAdmins();
     } catch (err) {
@@ -96,12 +86,8 @@ function AdminPage({ getToken }) {
 
     try {
       setLoading(true);
-      const token = await getToken();
-      await axios.delete(`${BACKEND_URL}/admin/remove`, {
-        headers: { Authorization: `Bearer ${token}` },
-        data: { email }
-      });
-      showNotification('Admin removed successfully', 'success');
+      await api.delete('/admin/remove', { data: { email } });
+      showNotification('Admin removed successfully');
       loadAdmins();
     } catch (err) {
       showNotification(err.response?.data?.detail || 'Failed to remove admin', 'error');
@@ -110,20 +96,6 @@ function AdminPage({ getToken }) {
     }
   };
 
-  // ========== TEMPLATE MANAGEMENT ==========
-  const loadTemplates = async () => {
-    try {
-      const token = await getToken();
-      const res = await axios.get(`${BACKEND_URL}/assignment-templates`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setTemplates(res.data.templates || []);
-    } catch (err) {
-      console.error('Failed to load templates:', err);
-    }
-  };
-
-  // Add question - FIXED: includes marks field
   const addQuestion = () => {
     setTemplateForm({
       ...templateForm,
@@ -170,10 +142,10 @@ function AdminPage({ getToken }) {
       }
       const num = q.number.trim();
       if (!numRe.test(num)) {
-        return { ok: false, message: `Invalid question number "${num}" at question ${i + 1}. Use formats like 1 or 1.1 or 2.3.4.` };
+        return { ok: false, message: `Invalid question number "${num}". Use formats like 1 or 1.1.` };
       }
       if (seen.has(num)) {
-        return { ok: false, message: `Duplicate question number "${num}". Each question number must be unique.` };
+        return { ok: false, message: `Duplicate question number "${num}".` };
       }
       seen.add(num);
       if (!q.prompt_md || !q.prompt_md.trim()) {
@@ -198,9 +170,6 @@ function AdminPage({ getToken }) {
 
     try {
       setLoading(true);
-      const token = await getToken();
-      
-      // Prepare payload with cleaned hints
       const payload = {
         title: templateForm.title,
         description: templateForm.description,
@@ -212,10 +181,8 @@ function AdminPage({ getToken }) {
         }))
       };
 
-      await axios.post(`${BACKEND_URL}/assignment-templates`, payload, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      showNotification('Template created successfully', 'success');
+      await api.post('/assignment-templates', payload);
+      showNotification('Template created successfully');
       setTemplateForm({
         title: '',
         description: '',
@@ -223,28 +190,10 @@ function AdminPage({ getToken }) {
       });
       loadTemplates();
     } catch (err) {
-      console.error('Create template error:', err.response?.data);
-      const errorMsg = err.response?.data?.detail 
-        ? (Array.isArray(err.response.data.detail) 
-            ? err.response.data.detail.map(e => `${e.loc.join('.')}: ${e.msg}`).join(', ')
-            : err.response.data.detail)
-        : 'Failed to create template';
+      const errorMsg = err.response?.data?.detail || 'Failed to create template';
       showNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // ========== ASSIGNMENT MANAGEMENT ==========
-  const loadAssignments = async () => {
-    try {
-      const token = await getToken();
-      const res = await axios.get(`${BACKEND_URL}/admin/assignments`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setAssignments(res.data.assignments || []);
-    } catch (err) {
-      console.error('Failed to load assignments:', err);
     }
   };
 
@@ -280,12 +229,11 @@ function AdminPage({ getToken }) {
 
     try {
       setLoading(true);
-      const token = await getToken();
-      await axios.post(`${BACKEND_URL}/assignments`, 
-        { ...assignmentForm, allowed_students: validEmails },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      showNotification('Assignment created successfully', 'success');
+      await api.post('/assignments', { 
+        ...assignmentForm, 
+        allowed_students: validEmails 
+      });
+      showNotification('Assignment created successfully');
       setAssignmentForm({
         template_id: '',
         allowed_students: ['']
@@ -298,7 +246,6 @@ function AdminPage({ getToken }) {
     }
   };
 
-  // ========== RENDER ==========
   return (
     <div className="admin-container">
       {notification.show && (
@@ -332,7 +279,6 @@ function AdminPage({ getToken }) {
       </div>
 
       <div className="admin-content">
-        {/* ADMINS TAB */}
         {activeTab === 'admins' && (
           <div className="admin-section">
             <h2>Manage Admins</h2>
@@ -376,7 +322,6 @@ function AdminPage({ getToken }) {
           </div>
         )}
 
-        {/* TEMPLATES TAB */}
         {activeTab === 'templates' && (
           <div className="admin-section">
             <h2>Create Assignment Template</h2>
@@ -414,12 +359,11 @@ function AdminPage({ getToken }) {
                     <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Question Number</label>
                     <input
                       type="text"
-                      placeholder="e.g., 1 or 1.1 or 2.3.4"
+                      placeholder="e.g., 1 or 1.1"
                       value={question.number}
                       onChange={(e) => updateQuestion(qIdx, 'number', e.target.value)}
                       className="admin-input"
                     />
-                    <small style={{ color: '#666' }}>Required. Use numeric dot notation.</small>
                   </div>
 
                   <div style={{ marginBottom: '8px' }}>
@@ -428,7 +372,6 @@ function AdminPage({ getToken }) {
                       type="number"
                       min="0"
                       step="0.5"
-                      placeholder="e.g., 10"
                       value={question.marks}
                       onChange={(e) => updateQuestion(qIdx, 'marks', e.target.value)}
                       className="admin-input"
@@ -436,7 +379,7 @@ function AdminPage({ getToken }) {
                   </div>
                   
                   <div style={{ marginBottom: '8px' }}>
-                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Question Text (Markdown)</label>
+                    <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Question Text</label>
                     <textarea
                       placeholder="Question text"
                       value={question.prompt_md}
@@ -491,7 +434,6 @@ function AdminPage({ getToken }) {
           </div>
         )}
 
-        {/* ASSIGNMENTS TAB */}
         {activeTab === 'assignments' && (
           <div className="admin-section">
             <h2>Create Assignment</h2>
