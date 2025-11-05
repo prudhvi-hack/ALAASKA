@@ -366,45 +366,45 @@ function App() {
               </button>
             </div>
 
-            <div className="sidebar-scroll">
-              <h4 className="chat-title">Chats</h4>
-              {conversations.length === 0 && <p>No chats yet.</p>}
-              {conversations.map((c) => (
-                <div
-                  key={c.chat_id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
+          <div className="sidebar-scroll">
+            <h4 className="chat-title">Chats</h4>
+            {conversations.length === 0 && <p>No chats yet.</p>}
+            {conversations.map((c) => (
+              <div
+                key={c.chat_id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <button
+                  className={`conversation-button ${chatId === c.chat_id ? 'active-conversation' : ''}`}  // ← Add active class
+                  onClick={() => loadConversation(c.chat_id)}
+                  style={{ flex: 1, marginRight: "0.5rem" }}
+                  title={c.summary}
                 >
-                  <button
-                    className="conversation-button"
-                    onClick={() => loadConversation(c.chat_id)}
-                    style={{ flex: 1, marginRight: "0.5rem" }}
-                    title={c.summary}
+                  {c.summary}
+                </button>
+                <button
+                  className="icon-button delete-button"
+                  onClick={() => deleteConversation(c.chat_id)}
+                  title="Delete conversation"
+                  aria-label="Delete conversation"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    fill="grey"
+                    viewBox="0 0 24 24"
                   >
-                    {c.summary}
-                  </button>
-                  <button
-                    className="icon-button delete-button"
-                    onClick={() => deleteConversation(c.chat_id)}
-                    title="Delete conversation"
-                    aria-label="Delete conversation"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="16"
-                      height="16"
-                      fill="grey"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M3 6h18v2H3V6zm2 3h14l-1.5 13h-11L5 9zm5 2v9h2v-9H10zm4 0v9h2v-9h-2zM9 4V2h6v2h5v2H4V4h5z" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
+                    <path d="M3 6h18v2H3V6zm2 3h14l-1.5 13h-11L5 9zm5 2v9h2v-9H10zm4 0v9h2v-9h-2zM9 4V2h6v2h5v2H4V4h5z" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
           </div>
         )}
 
