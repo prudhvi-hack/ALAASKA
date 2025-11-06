@@ -14,7 +14,7 @@ from backend.db_assignments import (
     assignments_collection,
     student_assignments_collection
 )
-from backend.db_mongo import conversations_collection
+from backend.db_mongo import conversations_collection, users_collection
 from datetime import datetime, timezone
 import uuid
 
@@ -605,3 +605,39 @@ async def get_assignment_chats(assignment_id: str, auth: HTTPAuthorizationCreden
         })
     
     return {"chats": chats}
+
+@router.put("/assignments/{assignment_id}/students")
+async def update_assignment_students(
+    assignment_id: str,
+    request: dict,
+    auth: HTTPAuthorizationCredentials = Depends(http_bearer)
+):
+    """Update the allowed students list for an assignment (admin only)"""
+    user = await get_current_user(auth)
+    
+    # Check if user is admin
+    user_doc = await users_collection.find_one({"auth0_id": user["auth0_id"]})
+    if not user_doc or not user_doc.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    allowed_students = request.get("allowed_students", [])
+    if not allowed_students:
+        raise HTTPException(status_code=400, detail="Must provide at least one student email")
+    
+    # Normalize emails
+    allowed_students = [email.lower().strip() for email in allowed_students]
+    
+
+    result = await assignments_collection.update_one(
+        {"assignment_id": assignment_id},
+        {"$set": {"allowed_students": allowed_students}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    return {
+        "message": "Assignment updated successfully",
+        "assignment_id": assignment_id,
+        "total_students": len(allowed_students)
+    }

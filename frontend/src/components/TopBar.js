@@ -5,7 +5,6 @@ export default function TopBar({
   setCurrentView,
   isAdmin,
   user,
-  initializeSuperAdmin, // function prop from App
   checkAdminStatus,
   logout,
 }) {
@@ -59,24 +58,6 @@ export default function TopBar({
           </button>
         )}
 
-        {/* Initialize Super Admin - visible only for super email and when not admin */}
-        {user?.email === "gvp5349@psu.edu" && !isAdmin && (
-          <button
-            onClick={initializeSuperAdmin}
-            style={{
-              background: "#f39c12",
-              color: "white",
-              border: "none",
-              padding: "0.5rem 1rem",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "600",
-            }}
-            title="Initialize super admin"
-          >
-            🔑 Initialize Super Admin
-          </button>
-        )}
       </div>
 
       <h3 className="top-bar-title">

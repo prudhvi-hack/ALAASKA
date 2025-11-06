@@ -446,32 +446,6 @@ function App() {
                 </button>
               )}
               
-              {user?.email === 'gvp5349@psu.edu' && !isAdmin && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await api.post('/admin/initialize');
-                      showNotification('Super admin initialized!', 'success');
-                      const res = await api.get('/admin/check');
-                      setIsAdmin(!!res.data.is_admin);
-                    } catch (err) {
-                      console.error('Initialize error:', err);
-                      showNotification(err.response?.data?.detail || 'Failed to initialize', 'error');
-                    }
-                  }}
-                  style={{
-                    background: '#f39c12',
-                    color: 'white',
-                    border: 'none',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontWeight: '600'
-                  }}
-                >
-                  🔑 Initialize Super Admin
-                </button>
-              )}
             </div>
 
             <h3 className="top-bar-title">

@@ -20,7 +20,14 @@ function AdminPage() {
 
   const [assignmentForm, setAssignmentForm] = useState({
     template_id: '',
-    allowed_students: ['']
+    student_emails_text: '' // ✅ Changed to textarea input
+  });
+
+  // ✅ NEW: State for editing assignments
+  const [editingAssignment, setEditingAssignment] = useState(null);
+  const [editForm, setEditForm] = useState({
+    assignment_id: '',
+    student_emails_text: ''
   });
 
   useEffect(() => {
@@ -99,7 +106,7 @@ function AdminPage() {
   const addQuestion = () => {
     setTemplateForm({
       ...templateForm,
-      questions: [...templateForm.questions, { number: '', prompt_md: '', marks: 1, hints: [''] }]
+      questions: [...templateForm.questions, { number: '', prompt_md: '', marks: 1, hints: [] }]
     });
   };
 
@@ -177,7 +184,7 @@ function AdminPage() {
           number: q.number.trim(),
           prompt_md: q.prompt_md,
           marks: parseFloat(q.marks),
-          hints: q.hints.filter(h => h.trim() !== '')
+          hints: q.hints.filter(h => h && h.trim() !== '') // ✅ Filter empty hints
         }))
       };
 
@@ -186,7 +193,7 @@ function AdminPage() {
       setTemplateForm({
         title: '',
         description: '',
-        questions: [{ number: '', prompt_md: '', marks: 1, hints: [''] }]
+        questions: [{ number: '', prompt_md: '', marks: 1, hints: [] }] // ✅ Start with empty hints
       });
       loadTemplates();
     } catch (err) {
@@ -197,22 +204,18 @@ function AdminPage() {
     }
   };
 
-  const addStudentEmail = () => {
-    setAssignmentForm({
-      ...assignmentForm,
-      allowed_students: [...assignmentForm.allowed_students, '']
-    });
+  // ✅ NEW: Parse emails from textarea
+  const parseEmails = (text) => {
+    return text
+      .split('\n')
+      .map(email => email.trim())
+      .filter(email => email.length > 0);
   };
 
-  const removeStudentEmail = (index) => {
-    const newStudents = assignmentForm.allowed_students.filter((_, i) => i !== index);
-    setAssignmentForm({ ...assignmentForm, allowed_students: newStudents });
-  };
-
-  const updateStudentEmail = (index, value) => {
-    const newStudents = [...assignmentForm.allowed_students];
-    newStudents[index] = value;
-    setAssignmentForm({ ...assignmentForm, allowed_students: newStudents });
+  // ✅ NEW: Count valid emails
+  const countValidEmails = (text) => {
+    const emails = parseEmails(text);
+    return emails.filter(email => email.includes('@')).length;
   };
 
   const createAssignment = async () => {
@@ -221,7 +224,7 @@ function AdminPage() {
       return;
     }
 
-    const validEmails = assignmentForm.allowed_students.filter(email => email.trim());
+    const validEmails = parseEmails(assignmentForm.student_emails_text);
     if (validEmails.length === 0) {
       showNotification('Please add at least one student email', 'error');
       return;
@@ -230,17 +233,55 @@ function AdminPage() {
     try {
       setLoading(true);
       await api.post('/assignments', { 
-        ...assignmentForm, 
-        allowed_students: validEmails 
+        template_id: assignmentForm.template_id,
+        allowed_students: validEmails
       });
-      showNotification('Assignment created successfully');
+      showNotification(`Assignment created for ${validEmails.length} student(s)`);
       setAssignmentForm({
         template_id: '',
-        allowed_students: ['']
+        student_emails_text: ''
       });
       loadAssignments();
     } catch (err) {
       showNotification(err.response?.data?.detail || 'Failed to create assignment', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ NEW: Start editing assignment
+  const startEditAssignment = (assignment) => {
+    setEditingAssignment(assignment.assignment_id);
+    setEditForm({
+      assignment_id: assignment.assignment_id,
+      student_emails_text: assignment.allowed_students?.join('\n') || ''
+    });
+  };
+
+  // ✅ NEW: Cancel editing
+  const cancelEdit = () => {
+    setEditingAssignment(null);
+    setEditForm({ assignment_id: '', student_emails_text: '' });
+  };
+
+  // ✅ NEW: Update assignment with new students
+  const updateAssignment = async () => {
+    const validEmails = parseEmails(editForm.student_emails_text);
+    if (validEmails.length === 0) {
+      showNotification('Please add at least one student email', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.put(`/assignments/${editForm.assignment_id}/students`, {
+        allowed_students: validEmails
+      });
+      showNotification('Assignment updated successfully');
+      cancelEdit();
+      loadAssignments();
+    } catch (err) {
+      showNotification(err.response?.data?.detail || 'Failed to update assignment', 'error');
     } finally {
       setLoading(false);
     }
@@ -307,7 +348,7 @@ function AdminPage() {
                       {admin.added_by && admin.added_by !== 'N/A' && ` by ${admin.added_by}`}
                     </span>
                   </div>
-                  {admin.email !== 'gvp5349@psu.edu' && (
+                  {(
                     <button
                       onClick={() => removeAdmin(admin.email)}
                       className="remove-button"
@@ -381,7 +422,7 @@ function AdminPage() {
                   <div style={{ marginBottom: '8px' }}>
                     <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Question Text</label>
                     <textarea
-                      placeholder="Question text"
+                      placeholder="Question text (Markdown supported)"
                       value={question.prompt_md}
                       onChange={(e) => updateQuestion(qIdx, 'prompt_md', e.target.value)}
                       className="admin-textarea"
@@ -453,29 +494,24 @@ function AdminPage() {
               </select>
 
               <h3>Assign to Students</h3>
-              {assignmentForm.allowed_students.map((email, idx) => (
-                <div key={idx} className="student-email-group">
-                  <input
-                    type="email"
-                    placeholder="Student email"
-                    value={email}
-                    onChange={(e) => updateStudentEmail(idx, e.target.value)}
-                    className="admin-input"
-                  />
-                  {assignmentForm.allowed_students.length > 1 && (
-                    <button onClick={() => removeStudentEmail(idx)} className="remove-button-small">
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
+              <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                Enter student emails, one per line
+              </p>
+              <textarea
+                placeholder="student1@example.com&#10;student2@example.com&#10;student3@example.com"
+                value={assignmentForm.student_emails_text}
+                onChange={(e) => setAssignmentForm({ ...assignmentForm, student_emails_text: e.target.value })}
+                className="admin-textarea"
+                rows="8"
+                style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}
+              />
 
-              <button onClick={addStudentEmail} className="add-button-small">
-                + Add Student
-              </button>
-
-              <button onClick={createAssignment} disabled={loading} className="admin-button">
-                {loading ? 'Creating...' : 'Create Assignment'}
+              <button 
+                onClick={createAssignment} 
+                disabled={loading || !assignmentForm.template_id || countValidEmails(assignmentForm.student_emails_text) === 0} 
+                className="admin-button"
+              >
+                {loading ? 'Creating...' : `Add ${countValidEmails(assignmentForm.student_emails_text)} Student(s)`}
               </button>
             </div>
 
@@ -483,11 +519,56 @@ function AdminPage() {
               <h3>Created Assignments ({assignments.length})</h3>
               {assignments.map((assignment, idx) => (
                 <div key={idx} className="assignment-card-admin">
-                  <h4>{assignment.title}</h4>
-                  <p>{assignment.description}</p>
-                  <span className="assignment-meta">
-                    Assigned to {assignment.allowed_students?.length || 0} students
-                  </span>
+                  {editingAssignment === assignment.assignment_id ? (
+                    // ✅ Edit mode
+                    <div className="edit-assignment-form">
+                      <h4>{assignment.title}</h4>
+                      <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                        Edit student emails (one per line)
+                      </p>
+                      <textarea
+                        value={editForm.student_emails_text}
+                        onChange={(e) => setEditForm({ ...editForm, student_emails_text: e.target.value })}
+                        className="admin-textarea"
+                        rows="6"
+                        style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}
+                      />
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                        <button 
+                          onClick={updateAssignment} 
+                          disabled={loading}
+                          className="admin-button"
+                          style={{ flex: 1 }}
+                        >
+                          {loading ? 'Updating...' : `Update (${countValidEmails(editForm.student_emails_text)} students)`}
+                        </button>
+                        <button 
+                          onClick={cancelEdit}
+                          className="cancel-button"
+                          style={{ flex: 1 }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // ✅ View mode
+                    <>
+                      <div>
+                        <h4>{assignment.title}</h4>
+                        <p>{assignment.description}</p>
+                        <span className="assignment-meta">
+                          Assigned to {assignment.allowed_students?.length || 0} student(s)
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => startEditAssignment(assignment)}
+                        className="edit-button"
+                      >
+                        Edit Students
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
