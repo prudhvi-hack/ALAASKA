@@ -17,8 +17,46 @@ from backend.db_assignments import (
 from backend.db_mongo import conversations_collection, users_collection
 from datetime import datetime, timezone
 import uuid
+from fastapi.responses import StreamingResponse
+from backend.pdf_generator import create_gradescope_pdf
 
 router = APIRouter()
+
+# ========== HELPER FUNCTION ==========
+
+def create_assignment_system_prompt(question_number: str, question_text: str, hints: list = None) -> list:
+    """
+    Create initial messages for an assignment question chat.
+    
+    Returns list of [system_message, assistant_greeting]
+    """
+    hints_text = ""
+    if hints and len(hints) > 0:
+        hints_text = "\n\nAvailable hints for this question:\n" + "\n".join([f"- {hint}" for hint in hints])
+    
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own. "
+                "Keep the conversation going with a question at the end your replies. "
+                "Identify the student's level with guiding questions about the topic they are inquiring about. "
+                "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints. "
+                "Discuss only academic topics and nothing else."
+                f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
+            )
+        },
+        {
+            "role": "assistant",
+            "content": f"""Hi! I'm here to help you work through this assignment question:
+
+**Question {question_number}:** {question_text}
+
+Before we dive in, I'd like to understand your initial thoughts. What's your first impression of this question? What concepts or ideas come to mind when you read it?
+
+Take your time - there's no rush. Let's work through this together! 🎯"""
+        }
+    ]
 
 # ========== ADMIN ROUTES ==========
 
@@ -113,7 +151,115 @@ async def get_all_assignments(user: dict = Depends(require_admin)):
         })
     return {"assignments": assignments_list}
 
-# ========== STUDENT ROUTES ==========
+@router.put("/assignments/{assignment_id}/students")
+async def update_assignment_students(
+    assignment_id: str,
+    request: dict,
+    user: dict = Depends(require_admin)
+):
+    """Update the allowed students list for an assignment (admin only)"""
+    allowed_students = request.get("allowed_students", [])
+    if not allowed_students:
+        raise HTTPException(status_code=400, detail="Must provide at least one student email")
+    
+    # Normalize emails
+    allowed_students = [email.lower().strip() for email in allowed_students]
+    
+    result = await assignments_collection.update_one(
+        {"assignment_id": assignment_id},
+        {"$set": {"allowed_students": allowed_students}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    return {
+        "message": "Assignment updated successfully",
+        "assignment_id": assignment_id,
+        "total_students": len(allowed_students)
+    }
+
+
+
+
+# Update the export_assignment_pdf function
+
+@router.post("/assignments/{assignment_id}/export-pdf")
+async def export_assignment_pdf(
+    assignment_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Export assignment submissions as Gradescope-compatible PDF (admin only)"""
+    try:
+        # Get assignment details
+        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        
+        # Get all student submissions
+        cursor = student_assignments_collection.find(
+            {"assignment_id": assignment_id},
+            {"_id": 0}
+        )
+        
+        students_data = []
+        async for student_assignment in cursor:
+            # Get student details
+            user_doc = await users_collection.find_one({"email": student_assignment["student_email"]})
+            
+            student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
+            student_email = student_assignment["student_email"]
+            
+            # Process questions - include chat_id ✅
+            questions_data = []
+            for question in student_assignment["questions"]:
+                questions_data.append({
+                    "number": question.get("number", "?"),
+                    "marks": question.get("marks", 0),
+                    "student_solution": question.get("student_solution"),
+                    "chat_id": question.get("chat_id")  # ✅ NEW
+                })
+            
+            students_data.append({
+                "name": student_name,
+                "email": student_email,
+                "questions": questions_data
+            })
+        
+        if not students_data:
+            raise HTTPException(status_code=404, detail="No submissions found for this assignment")
+        
+        # ✅ Get base URL from environment or use default
+        from backend.config import FRONTEND_URL
+        base_url = FRONTEND_URL if hasattr(FRONTEND_URL, '__str__') else "http://localhost:3000"
+        
+        # Generate PDF with base_url
+        pdf_buffer = create_gradescope_pdf(
+            assignment_title=assignment["title"],
+            students_data=students_data,
+            base_url=base_url  # ✅ NEW
+        )
+        
+        # Create filename
+        safe_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in assignment["title"])
+        filename = f"{safe_title}_submissions.pdf"
+        
+        # Return as streaming response
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")# ========== STUDENT ROUTES ==========
 
 @router.get("/assignments")
 async def get_student_assignments(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
@@ -175,40 +321,16 @@ async def accept_assignment(assignment_id: str, auth: HTTPAuthorizationCredentia
     for idx, q in enumerate(assignment["questions"]):
         chat_id = str(uuid.uuid4())
         
-        # BACKWARD COMPATIBILITY: Handle old schema
         question_number = q.get('number', str(idx + 1))
-        question_text = q.get('prompt_md', q.get('question_text', ''))
+        question_text = q.get('prompt_md', '')
         question_marks = q.get('marks', 0)
         
-        # Prepare hints text
-        hints_text = ""
-        if q.get('hints') and len(q['hints']) > 0:
-            hints_text = "\n\nAvailable hints for this question:\n" + "\n".join([f"- {hint}" for hint in q['hints']])
-        
-        # Initial system and assistant message for the question
-        initial_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own."
-                    "Keep the conversation going with a question at the end your replies."
-                    "Identify the student's level with guiding questions about the topic they are inquiring about."
-                    "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
-                    "Discuss only academic topics and nothing else."
-                    f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
-                )
-            },
-            {
-                "role": "assistant",
-                "content": f"""Hi! I'm here to help you work through this assignment question:
-
-**Question {question_number}:** {question_text}
-
-Before we dive in, I'd like to understand your initial thoughts. What's your first impression of this question? What concepts or ideas come to mind when you read it?
-
-Take your time - there's no rush. Let's work through this together! 🎯"""
-            }
-        ]
+        # ✅ Use helper function
+        initial_messages = create_assignment_system_prompt(
+            question_number=question_number,
+            question_text=question_text,
+            hints=q.get("hints", [])
+        )
         
         # Create conversation document
         conversation_doc = {
@@ -226,7 +348,7 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
         
         await conversations_collection.insert_one(conversation_doc)
         
-        # Add question with chat_id (normalize to new schema)
+        # Add question with chat_id
         questions_with_chats.append({
             "question_id": q["question_id"],
             "number": question_number,
@@ -234,7 +356,11 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
             "marks": question_marks,
             "hints": q.get("hints", []),
             "chat_id": chat_id,
+            "old_chats": [],  # ✅ Initialize empty array
             "student_solution": None,
+            "submitted_chat_id": None,
+            "submitted_message_index": None,
+            "submitted_at": None,
             "is_correct": None,
             "attempts": 0
         })
@@ -290,7 +416,7 @@ async def get_assignment_details(assignment_id: str, auth: HTTPAuthorizationCred
 async def get_question_chat(
     assignment_id: str,
     question_id: str,
-    reset: bool = False,  # ← Add reset parameter
+    reset: bool = False,
     auth: HTTPAuthorizationCredentials = Depends(http_bearer)
 ):
     """Get or create chat for a specific question. If reset=True, archive old chat and create new one."""
@@ -328,15 +454,18 @@ async def get_question_chat(
         if "old_chats" not in target_question:
             target_question["old_chats"] = []
         
-        # Add old chat to old_chats array (no soft delete, just archive)
+        # Add old chat to old_chats array
         target_question["old_chats"].append(old_chat_id)
         
         # Clear current chat_id to force creation of new one
         target_question["chat_id"] = None
         
-        # Reset attempts and solution
+        # Reset submission data
         target_question["attempts"] = 0
         target_question["student_solution"] = None
+        target_question["submitted_chat_id"] = None
+        target_question["submitted_message_index"] = None
+        target_question["submitted_at"] = None
         target_question["is_correct"] = None
         
         # Update in database
@@ -365,49 +494,28 @@ async def get_question_chat(
                 "reset": False
             }
     
-    # Create new chat (same logic for first time or reset)
-    assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment template not found")
-    
+    # Create new chat (for reset or if missing)
     new_chat_id = str(uuid.uuid4())
     
     question_number = target_question.get('number', str(question_index + 1))
-    question_text = target_question.get('prompt_md', target_question.get('question_text', ''))
+    question_text = target_question.get('prompt_md', '')
     
-    # Prepare hints text
-    hints_text = ""
-    if target_question.get('hints') and len(target_question['hints']) > 0:
-        hints_text = "\n\nAvailable hints for this question:\n" + "\n".join([f"- {hint}" for hint in target_question['hints']])
+    # ✅ Use helper function
+    initial_messages = create_assignment_system_prompt(
+        question_number=question_number,
+        question_text=question_text,
+        hints=target_question.get("hints", [])
+    )
     
-    # Create new conversation
-    initial_messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own."
-                "Keep the conversation going with a question at the end your replies."
-                "Identify the student's level with guiding questions about the topic they are inquiring about."
-                "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
-                "Discuss only academic topics and nothing else."
-                f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
-            )
-        },
-        {
-            "role": "assistant",
-            "content": f"""Hi! Let's work on this question together:
-
-**Question {question_number}:** {question_text}
-
-What are your initial thoughts? Feel free to share your approach or ask any questions! 🎯"""
-        }
-    ]
+    # Get assignment for summary
+    assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+    assignment_title = assignment["title"] if assignment else "Assignment"
     
     conversation_doc = {
         "chat_id": new_chat_id,
         "user_id": user_id,
         "messages": initial_messages,
-        "summary": f"{assignment['title']} - Q{question_number}",
+        "summary": f"{assignment_title} - Q{question_number}",
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
         "is_deleted": False,
@@ -439,8 +547,6 @@ What are your initial thoughts? Feel free to share your approach or ask any ques
         "created": True,
         "reset": reset
     }
-
-# Update the submit_answer endpoint (around line 380):
 
 @router.post("/assignments/{assignment_id}/questions/{question_id}/submit-answer")
 async def submit_answer(
@@ -531,54 +637,6 @@ async def submit_answer(
         "attempts": target_question["attempts"]
     }
 
-@router.post("/assignments/{assignment_id}/questions/{question_id}/solution")
-async def submit_solution(
-    assignment_id: str,
-    question_id: str,
-    request: MarkSolutionRequest,
-    auth: HTTPAuthorizationCredentials = Depends(http_bearer)
-):
-    """Submit a solution for a question"""
-    user = await get_current_user(auth)
-    user_email = user["email"].lower()
-    
-    # Get student assignment
-    student_assignment = await student_assignments_collection.find_one({
-        "assignment_id": assignment_id,
-        "student_email": user_email
-    })
-    
-    if not student_assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    
-    # Find the question
-    question_found = False
-    for question in student_assignment["questions"]:
-        if question["question_id"] == question_id:
-            question["student_solution"] = request.solution
-            question["is_correct"] = request.is_correct
-            question["attempts"] = question.get("attempts", 0) + 1
-            question_found = True
-            break
-    
-    if not question_found:
-        raise HTTPException(status_code=404, detail="Question not found")
-    
-    # Update the document
-    await student_assignments_collection.update_one(
-        {
-            "assignment_id": assignment_id,
-            "student_email": user_email
-        },
-        {
-            "$set": {
-                "questions": student_assignment["questions"]
-            }
-        }
-    )
-    
-    return {"message": "Solution submitted successfully"}
-
 @router.get("/assignments/{assignment_id}/chats")
 async def get_assignment_chats(assignment_id: str, auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
     """Get all chat sessions for this assignment"""
@@ -600,44 +658,8 @@ async def get_assignment_chats(assignment_id: str, auth: HTTPAuthorizationCreden
         chats.append({
             "question_id": question["question_id"],
             "number": question.get("number", ""),
-            "prompt_md": question.get("prompt_md", question.get("question_text", "")),
+            "prompt_md": question.get("prompt_md", ""),
             "chat_id": question.get("chat_id")
         })
     
     return {"chats": chats}
-
-@router.put("/assignments/{assignment_id}/students")
-async def update_assignment_students(
-    assignment_id: str,
-    request: dict,
-    auth: HTTPAuthorizationCredentials = Depends(http_bearer)
-):
-    """Update the allowed students list for an assignment (admin only)"""
-    user = await get_current_user(auth)
-    
-    # Check if user is admin
-    user_doc = await users_collection.find_one({"auth0_id": user["auth0_id"]})
-    if not user_doc or not user_doc.get("is_admin", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    allowed_students = request.get("allowed_students", [])
-    if not allowed_students:
-        raise HTTPException(status_code=400, detail="Must provide at least one student email")
-    
-    # Normalize emails
-    allowed_students = [email.lower().strip() for email in allowed_students]
-    
-
-    result = await assignments_collection.update_one(
-        {"assignment_id": assignment_id},
-        {"$set": {"allowed_students": allowed_students}}
-    )
-    
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    
-    return {
-        "message": "Assignment updated successfully",
-        "assignment_id": assignment_id,
-        "total_students": len(allowed_students)
-    }

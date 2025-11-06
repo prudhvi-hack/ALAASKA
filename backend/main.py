@@ -7,7 +7,6 @@ from backend.middleware import get_cors_middleware, add_security_headers, limit_
 from backend.db_mongo import initialize_database, close_connection
 from backend.db_assignments import create_assignment_indexes
 from backend.routes_chat import router as chat_router
-from backend.routes_conversations import router as conversations_router
 from backend.routes_assignments import router as assignments_router
 from backend.routes_admin import router as admin_router  # Make sure this is imported
 
@@ -58,7 +57,6 @@ app.middleware("http")(limit_request_size)
 
 # Include routers - MAKE SURE admin_router is included
 app.include_router(chat_router, tags=["chat"])
-app.include_router(conversations_router, tags=["conversations"])
 app.include_router(assignments_router, tags=["assignments"])
 app.include_router(admin_router, tags=["admin"])  # This line must be present
 

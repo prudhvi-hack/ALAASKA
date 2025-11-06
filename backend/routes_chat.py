@@ -43,6 +43,34 @@ def now_utc():
     return datetime.now(timezone.utc)
 
 
+# ========== GET ALL CONVERSATIONS ==========
+
+@router.get("/conversations")
+async def get_conversations(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
+    """Get all conversations for the current user"""
+    user = await get_current_user(auth)
+    user_id = user["auth0_id"]
+    
+    cursor = conversations_collection.find(
+        {"user_id": user_id, "is_deleted": False},
+        {"_id": 0}
+    ).sort("updated_at", -1)
+    
+    conversations = []
+    async for conv in cursor:
+        conversations.append({
+            "chat_id": conv["chat_id"],
+            "summary": conv.get("summary", "New Chat"),
+            "created_at": conv["created_at"].isoformat() if "created_at" in conv else None,
+            "updated_at": conv["updated_at"].isoformat() if "updated_at" in conv else None,
+            "is_assignment_chat": conv.get("is_assignment_chat", False)
+        })
+    
+    return conversations
+
+
+# ========== GET SINGLE CONVERSATION WITH METADATA ==========
+
 @router.get("/conversation/{chat_id}")
 async def get_conversation(
     chat_id: str,
@@ -52,12 +80,20 @@ async def get_conversation(
     user = await get_current_user(auth)
     user_id = user["auth0_id"]
     user_email = user["email"].lower()
+    is_admin = user.get("is_admin", False)
 
-    conversation = await conversations_collection.find_one({
-        "chat_id": chat_id,
-        "user_id": user_id,
-        "is_deleted": False
-    })
+    # Admins can view any conversation
+    if is_admin:
+        conversation = await conversations_collection.find_one({
+            "chat_id": chat_id,
+            "is_deleted": False
+        })
+    else:
+        conversation = await conversations_collection.find_one({
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "is_deleted": False
+        })
 
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -66,12 +102,13 @@ async def get_conversation(
     metadata = {
         "is_assignment_chat": conversation.get("is_assignment_chat", False),
         "assignment_id": None,
-        "assignment_title": None,  # ← Add this
+        "assignment_title": None,
         "question_id": None,
         "question_number": None,
         "has_submitted": False,
         "submitted_message_index": None,
-        "attempts": 0
+        "attempts": 0,
+        "is_admin_view": is_admin and conversation.get("user_id") != user_id
     }
 
     # If assignment chat, fetch question details
@@ -82,6 +119,13 @@ async def get_conversation(
         metadata["assignment_id"] = assignment_id
         metadata["question_id"] = question_id
 
+        # For admin view, find the student who owns this conversation
+        if is_admin and conversation.get("user_id") != user_id:
+            from backend.db_mongo import users_collection
+            conversation_owner = await users_collection.find_one({"auth0_id": conversation.get("user_id")})
+            if conversation_owner:
+                user_email = conversation_owner["email"].lower()
+
         # Get student assignment
         student_assignment = await student_assignments_collection.find_one({
             "assignment_id": assignment_id,
@@ -89,7 +133,6 @@ async def get_conversation(
         })
 
         if student_assignment:
-            # ✅ Add assignment title
             metadata["assignment_title"] = student_assignment.get("title", "Assignment")
             
             for q in student_assignment.get("questions", []):
@@ -107,6 +150,29 @@ async def get_conversation(
         "messages": messages,
         "metadata": metadata
     }
+
+
+# ========== DELETE CONVERSATION ==========
+
+@router.put("/conversation/{chat_id}/delete")
+async def delete_conversation(chat_id: str, auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
+    """Soft delete a conversation"""
+    user = await get_current_user(auth)
+    user_id = user["auth0_id"]
+    
+    result = await conversations_collection.update_one(
+        {"chat_id": chat_id, "user_id": user_id},
+        {"$set": {"is_deleted": True}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    return {"message": "Conversation deleted successfully"}
+
+
+# ========== START NEW CHAT ==========
+
 @router.post("/chat/start")
 async def start_chat(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
     user = await get_current_user(auth)
@@ -138,6 +204,9 @@ async def start_chat(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
         "chat_id": chat_id,
         "history": initial_messages
     }
+
+
+# ========== SEND CHAT MESSAGE ==========
 
 @router.post("/chat")
 async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depends(http_bearer)):

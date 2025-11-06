@@ -11,6 +11,7 @@ function AdminPage() {
   const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
 
   const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [expandedDescriptions, setExpandedDescriptions] = useState({});
 
   const [templateForm, setTemplateForm] = useState({
     title: '',
@@ -66,6 +67,49 @@ function AdminPage() {
       setAssignments(res.data.assignments || []);
     } catch (err) {
       console.error('Failed to load assignments:', err);
+    }
+  };
+  // Add this function after loadAssignments
+
+  const exportAssignmentPDF = async (assignmentId, assignmentTitle) => {
+    try {
+      setLoading(true);
+      showNotification('Generating PDF... This may take a moment', 'info');
+      
+      const response = await api.post(
+        `/assignments/${assignmentId}/export-pdf`,
+        {},
+        {
+          responseType: 'blob' // Important: Tell axios to expect binary data
+        }
+      );
+      
+      // Create a blob from the PDF stream
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename
+      const safeTitle = assignmentTitle.replace(/[^a-zA-Z0-9-_ ]/g, '_');
+      link.download = `${safeTitle}_submissions.pdf`;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      showNotification('PDF downloaded successfully!', 'success');
+    } catch (err) {
+      console.error('Export error:', err);
+      showNotification(err.response?.data?.detail || 'Failed to export PDF', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -552,21 +596,48 @@ function AdminPage() {
                       </div>
                     </div>
                   ) : (
-                    // ✅ View mode
+                    // ✅ View mode with expandable description
                     <>
-                      <div>
+                      <div className="assignment-card-content">
                         <h4>{assignment.title}</h4>
-                        <p>{assignment.description}</p>
-                        <span className="assignment-meta">
+                        
+                        <p className={`assignment-description ${expandedDescriptions[assignment.assignment_id] ? 'expanded' : 'truncated'}`}>
+                          {assignment.description}
+                        </p>
+                        
+                        {assignment.description && assignment.description.length > 100 && (
+                          <button 
+                            className="see-more-button"
+                            onClick={() => setExpandedDescriptions(prev => ({ 
+                              ...prev, 
+                              [assignment.assignment_id]: !prev[assignment.assignment_id] 
+                            }))}
+                          >
+                            {expandedDescriptions[assignment.assignment_id] ? 'See less' : 'See more'}
+                          </button>
+                        )}
+                        
+                        <span className="assignment-meta" style={{ display: 'block', marginTop: '0.5rem' }}>
                           Assigned to {assignment.allowed_students?.length || 0} student(s)
                         </span>
                       </div>
-                      <button
-                        onClick={() => startEditAssignment(assignment)}
-                        className="edit-button"
-                      >
-                        Edit Students
-                      </button>
+                      
+                      <div className="assignment-card-actions">
+                        <button
+                          onClick={() => startEditAssignment(assignment)}
+                          className="edit-button"
+                        >
+                          Edit Students
+                        </button>
+                        
+                        <button
+                          onClick={() => exportAssignmentPDF(assignment.assignment_id, assignment.title)}
+                          disabled={loading}
+                          className="export-pdf-button"
+                        >
+                          📄 Export PDF
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
