@@ -3,6 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from backend.auth import get_current_user, http_bearer
 from backend.models import ChatRequest
 from backend.db_mongo import conversations_collection
+from backend.db_assignments import student_assignments_collection
 from backend.config import OPENAI_API_KEY, MODEL_ID, SUMMARIZE_MODEL_ID
 from openai import AsyncOpenAI
 from datetime import datetime, timezone
@@ -35,19 +36,83 @@ async def summarize_title(text: str) -> str:
         return (resp.choices[0].message.content or "").strip().strip('"')
     except Exception as e:
         logger.warning(f"Title summarization failed: {e}")
-        # Fallback: first 50 chars
         s = (text or "").strip()
         return s if len(s) <= 50 else s[:50] + "..."
 
 def now_utc():
     return datetime.now(timezone.utc)
 
+
+@router.get("/conversation/{chat_id}")
+async def get_conversation(
+    chat_id: str,
+    auth: HTTPAuthorizationCredentials = Depends(http_bearer)
+):
+    """Get conversation messages with metadata"""
+    user = await get_current_user(auth)
+    user_id = user["auth0_id"]
+    user_email = user["email"].lower()
+
+    conversation = await conversations_collection.find_one({
+        "chat_id": chat_id,
+        "user_id": user_id,
+        "is_deleted": False
+    })
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    # Build metadata
+    metadata = {
+        "is_assignment_chat": conversation.get("is_assignment_chat", False),
+        "assignment_id": None,
+        "assignment_title": None,  # ← Add this
+        "question_id": None,
+        "question_number": None,
+        "has_submitted": False,
+        "submitted_message_index": None,
+        "attempts": 0
+    }
+
+    # If assignment chat, fetch question details
+    if conversation.get("is_assignment_chat"):
+        assignment_id = conversation.get("assignment_id")
+        question_id = conversation.get("question_id")
+        
+        metadata["assignment_id"] = assignment_id
+        metadata["question_id"] = question_id
+
+        # Get student assignment
+        student_assignment = await student_assignments_collection.find_one({
+            "assignment_id": assignment_id,
+            "student_email": user_email
+        })
+
+        if student_assignment:
+            # ✅ Add assignment title
+            metadata["assignment_title"] = student_assignment.get("title", "Assignment")
+            
+            for q in student_assignment.get("questions", []):
+                if q["question_id"] == question_id:
+                    metadata["question_number"] = q.get("number", "")
+                    metadata["has_submitted"] = q.get("student_solution") is not None
+                    metadata["submitted_message_index"] = q.get("submitted_message_index")
+                    metadata["attempts"] = q.get("attempts", 0)
+                    break
+
+    # Return messages with metadata
+    messages = conversation.get("messages", [])
+    
+    return {
+        "messages": messages,
+        "metadata": metadata
+    }
 @router.post("/chat/start")
 async def start_chat(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
     user = await get_current_user(auth)
     user_id = user["auth0_id"]
 
-    chat_id = uuid.uuid4().hex  # 32-char hex id used elsewhere (assignments use uuid4())
+    chat_id = uuid.uuid4().hex
     initial_messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "assistant", "content": "Hi! Welcome to ALAASKA. How can I help you today?"}
@@ -99,16 +164,11 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
         messages = existing.get("messages", [])
         summary = existing.get("summary", "New Chat")
     else:
-        # New conversation
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT}
-        ]
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         summary = "New Chat"
 
-    # Append user message
     messages.append({"role": "user", "content": msg_text})
 
-    # Call OpenAI for assistant reply
     try:
         resp = await client.chat.completions.create(
             model=MODEL_ID,
@@ -120,10 +180,8 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
         logger.error(f"OpenAI chat error: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
-    # Append assistant message
     messages.append({"role": "assistant", "content": reply})
 
-    # If new conversation, compute summary from first user message
     if not existing and summary in ("", "New Chat"):
         summary = await summarize_title(msg_text)
 
@@ -149,5 +207,5 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     return {
         "response": reply,
         "chat_id": chat_id,
-        "history": messages
+        "messages": messages
     }

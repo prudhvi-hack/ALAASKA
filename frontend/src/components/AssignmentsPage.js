@@ -73,7 +73,7 @@ export default function AssignmentsPage() {
         alert('New chat started! Your previous conversation is saved.');
       }
       
-      window.location.href = `/?chat_id=${res.data.chat_id}&assignment=true`;
+      window.location.href = `/?chat_id=${res.data.chat_id}`;
     } catch (err) {
       console.error('[AssignmentsPage] Failed to open question chat:', err);
       alert(err.response?.data?.detail || 'Failed to open question chat');
@@ -150,20 +150,22 @@ export default function AssignmentsPage() {
                     </ReactMarkdown>
                   </div>
                   
-                  {q.hints && q.hints.length > 0 && (
-                    <details className="hints-section">
-                      <summary className="hints-summary">
-                        💡 Show Hints ({q.hints.length})
-                      </summary>
-                      <ul className="hints-list">
-                        {q.hints.map((hint, hIdx) => (
+                  {q.hints && q.hints.length > 0 && q.hints.some(hint => hint && hint.trim()) && (  // ✅ Added check for non-empty hints
+                  <details className="hints-section">
+                    <summary className="hints-summary">
+                      💡 Show Hints ({q.hints.filter(h => h && h.trim()).length})  // ✅ Count only non-empty hints
+                    </summary>
+                    <ul className="hints-list">
+                      {q.hints
+                        .filter(hint => hint && hint.trim())  // ✅ Filter out empty hints
+                        .map((hint, hIdx) => (
                           <li key={hIdx}>{hint}</li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
+                        ))
+                      }
+                    </ul>
+                  </details>
+)}
 
-                  {/* ✅ UPDATED: Show submission if exists */}
                   {q.student_solution && (
                     <div className="student-solution-box">
                       <div className="solution-header">

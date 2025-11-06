@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
 import logo from './assets/alaaska_logo.png';
 import AssignmentsPage from './components/AssignmentsPage';
 import AdminPage from './components/AdminPage';
+import ChatInterface from './components/ChatInterface';
 import { useAuth } from './contexts/AuthContext';
 import api, { setupAxiosInterceptors } from './api/axios';
 
@@ -23,9 +22,7 @@ function App() {
   
   const [showFullSidebar, setShowFullSidebar] = useState(window.innerWidth > 768);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  const [typingText, setTypingText] = useState("");
   
-  const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -54,21 +51,18 @@ function App() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typingText]);
+  }, [messages]);
 
-  // FIX: Check URL params on mount AND when isAuthenticated changes
+  // Check URL params on mount
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const urlParams = new URLSearchParams(window.location.search);
     const chatIdFromUrl = urlParams.get('chat_id');
-    const isAssignment = urlParams.get('assignment') === 'true';
     
-    if (chatIdFromUrl && isAssignment) {
-      // IMPORTANT: Set view to 'chat' BEFORE loading conversation
+    if (chatIdFromUrl) {
       setCurrentView('chat');
       loadConversation(chatIdFromUrl);
-      // Clean URL after loading
       window.history.replaceState({}, document.title, '/');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,13 +88,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
-      inputRef.current.style.height = inputRef.current.scrollHeight + "px";
-    }
-  }, [userInput]);
-
   const sendMessage = async () => {
     if (!userInput.trim() || isLoading) return;
     if (!isAuthenticated) {
@@ -113,43 +100,38 @@ function App() {
     setUserInput("");
     setIsLoading(true);
 
+    // Add loading indicator
+    setMessages((prev) => [...prev, { role: "assistant", content: "", isStreaming: true }]);
+
     try {
       const res = await api.post('/chat', { message: text, chat_id: chatId });
-      setChatId(res.data.chat_id);
+      
+      // Remove loading indicator and add actual response
+      setMessages((prev) => {
+        const withoutLoader = prev.slice(0, -1);
+        return [...withoutLoader, { role: "assistant", content: res.data.response }];
+      });
 
-      const assistantMessages = res.data.history.filter((m) => m.role === "assistant");
-      const lastAssistantMsg = assistantMessages[assistantMessages.length - 1];
-
-      if (lastAssistantMsg) {
-        const fullReply = lastAssistantMsg.content || "";
-        let i = 0;
-        setTypingText("");
-        const typeInterval = setInterval(() => {
-          setTypingText((prev) => {
-            const next = prev + fullReply[i];
-            i++;
-            if (i >= fullReply.length) {
-              clearInterval(typeInterval);
-              setMessages((prevMsgs) => [...prevMsgs, { role: "assistant", content: fullReply }]);
-              setTypingText("");
-            }
-            return next;
-          });
-        }, 5);
-      }
-
-      if (messages.filter(m => m.role === "user").length === 0) {
+      // Update chat ID if new chat
+      if (res.data.chat_id !== chatId) {
+        setChatId(res.data.chat_id);
+        
+        // Refresh conversations list
         setTimeout(async () => {
           try {
             const convRes = await api.get('/conversations');
             setConversations(convRes.data);
-          } catch {}
-        }, 1000);
+          } catch (err) {
+            console.error('Failed to refresh conversations:', err);
+          }
+        }, 500);
       }
     } catch (err) {
       console.error("Message send failed", err);
       showNotification(err.response?.status === 401 ? "Session expired. Please log in again." : "Failed to send message.");
-      setMessages((prev) => prev.slice(0, -1));
+      
+      // Remove loading indicator and user message on error
+      setMessages((prev) => prev.slice(0, -2));
     } finally {
       setIsLoading(false);
     }
@@ -185,7 +167,11 @@ function App() {
     try {
       setCurrentView('chat');
       const res = await api.get(`/conversation/${id}`);
-      const displayMessages = (Array.isArray(res.data) ? res.data : []).filter(msg => msg.role !== 'system');
+      
+      // Handle new response format
+      const allMessages = res.data.messages || res.data || [];
+      const displayMessages = allMessages.filter(msg => msg.role !== 'system');
+      
       setMessages(displayMessages);
       setChatId(id);
       if (windowWidth <= 768) setShowFullSidebar(false);
@@ -366,45 +352,45 @@ function App() {
               </button>
             </div>
 
-          <div className="sidebar-scroll">
-            <h4 className="chat-title">Chats</h4>
-            {conversations.length === 0 && <p>No chats yet.</p>}
-            {conversations.map((c) => (
-              <div
-                key={c.chat_id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <button
-                  className={`conversation-button ${chatId === c.chat_id ? 'active-conversation' : ''}`}  // ← Add active class
-                  onClick={() => loadConversation(c.chat_id)}
-                  style={{ flex: 1, marginRight: "0.5rem" }}
-                  title={c.summary}
+            <div className="sidebar-scroll">
+              <h4 className="chat-title">Chats</h4>
+              {conversations.length === 0 && <p>No chats yet.</p>}
+              {conversations.map((c) => (
+                <div
+                  key={c.chat_id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
                 >
-                  {c.summary}
-                </button>
-                <button
-                  className="icon-button delete-button"
-                  onClick={() => deleteConversation(c.chat_id)}
-                  title="Delete conversation"
-                  aria-label="Delete conversation"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    fill="grey"
-                    viewBox="0 0 24 24"
+                  <button
+                    className={`conversation-button ${chatId === c.chat_id ? 'active-conversation' : ''}`}
+                    onClick={() => loadConversation(c.chat_id)}
+                    style={{ flex: 1, marginRight: "0.5rem" }}
+                    title={c.summary}
                   >
-                    <path d="M3 6h18v2H3V6zm2 3h14l-1.5 13h-11L5 9zm5 2v9h2v-9H10zm4 0v9h2v-9h-2zM9 4V2h6v2h5v2H4V4h5z" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
+                    {c.summary}
+                  </button>
+                  <button
+                    className="icon-button delete-button"
+                    onClick={() => deleteConversation(c.chat_id)}
+                    title="Delete conversation"
+                    aria-label="Delete conversation"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      fill="grey"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="M3 6h18v2H3V6zm2 3h14l-1.5 13h-11L5 9zm5 2v9h2v-9H10zm4 0v9h2v-9h-2zM9 4V2h6v2h5v2H4V4h5z" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -546,95 +532,19 @@ function App() {
             </div>
           </div>
           
+          {/* ✅ UPDATED: Use component-based rendering */}
           {currentView === 'admin' ? (
             <AdminPage />
           ) : currentView === 'assignments' ? (
             <AssignmentsPage />
           ) : (
-            <div className="container">
-              <div className="main">
-                <div className="chatbox">
-                  <div className="messages">
-                    <div className="messages-inner">
-                      {messages
-                        .filter((msg) => msg.role !== "system")
-                        .map((msg, i) => (
-                          <div
-                            key={i}
-                            className={`message ${
-                              msg.role === "user" ? "user-message" : "assistant-message"
-                            }`}
-                          >
-                            {msg.role === "assistant" ? (
-                              <div
-                                dangerouslySetInnerHTML={{
-                                  __html: DOMPurify.sanitize(marked.parse(msg.content || "")),
-                                }}
-                              />
-                            ) : (
-                              msg.content
-                            )}
-                          </div>
-                        ))}
-                      {typingText ? (
-                        <div className="message assistant-message">
-                          <span
-                            dangerouslySetInnerHTML={{
-                              __html: DOMPurify.sanitize(marked.parse(typingText)),
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        isLoading && (
-                          <div className="message assistant-message">
-                            <div className="typing-indicator-with-logo">
-                              <img src={logo} alt="Alaaska Logo" className="spinning-logo" />
-                              <span className="typing-text">typing...</span>
-                            </div>
-                          </div>
-                        )
-                      )}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  </div>
-
-                  <div className="input-container">
-                    <textarea
-                      ref={inputRef}
-                      placeholder="Ask something..."
-                      value={userInput}
-                      onChange={(e) => setUserInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          sendMessage();
-                        }
-                      }}
-                      rows={3}
-                      maxLength={1000}
-                      aria-label="Type your message"
-                    />
-                    <button
-                      className="send-button"
-                      onClick={sendMessage}
-                      title="Send"
-                      aria-label="Send message"
-                      disabled={isLoading || !userInput.trim()}
-                    >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        fill="currentColor"
-                        viewBox="0 0 16 16"
-                      >
-                        <path d="M15.854.146a.5.5 0 0 1 .11.54l-6 14a.5.5 0 0 1-.948-.032l-2-6-6-2a.5.5 0 0 1 .032-.948l14-6a.5.5 0 0 1 .806.44zM6.832 8.065l1.476 4.427 4.318-10.078L6.832 8.065z" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ChatInterface
+              chatId={chatId}
+              messages={messages}
+              input={userInput}
+              setInput={setUserInput}
+              sendMessage={sendMessage}
+            />
           )}
 
           <div className="footer">

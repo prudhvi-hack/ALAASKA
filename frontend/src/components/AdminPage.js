@@ -15,7 +15,7 @@ function AdminPage() {
   const [templateForm, setTemplateForm] = useState({
     title: '',
     description: '',
-    questions: [{ number: '', prompt_md: '', marks: 1, hints: [''] }]
+    questions: [{ number: '', prompt_md: '', marks: 1, hints: [] }]
   });
 
   const [assignmentForm, setAssignmentForm] = useState({

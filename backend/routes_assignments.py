@@ -440,6 +440,8 @@ What are your initial thoughts? Feel free to share your approach or ask any ques
         "reset": reset
     }
 
+# Update the submit_answer endpoint (around line 380):
+
 @router.post("/assignments/{assignment_id}/questions/{question_id}/submit-answer")
 async def submit_answer(
     assignment_id: str,
@@ -475,7 +477,7 @@ async def submit_answer(
     
     # Verify the chat belongs to this question (current or old)
     valid_chat_ids = [target_question.get("chat_id")] + target_question.get("old_chats", [])
-    valid_chat_ids = [cid for cid in valid_chat_ids if cid]  # Remove None values
+    valid_chat_ids = [cid for cid in valid_chat_ids if cid]
     
     if request.chat_id not in valid_chat_ids:
         raise HTTPException(status_code=400, detail="Chat does not belong to this question")
@@ -487,24 +489,24 @@ async def submit_answer(
     
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found")
-    
-    # Verify message index is valid and is a user message
+
     messages = chat.get("messages", [])
-    if request.message_index >= len(messages):
-        raise HTTPException(status_code=400, detail="Invalid message index")
+    selected_message = None
+    actual_index = -1
     
-    selected_message = messages[request.message_index]
-    if selected_message.get("role") != "user":
-        raise HTTPException(status_code=400, detail="Can only submit user messages as answers")
+    for idx, msg in enumerate(messages):
+        if msg.get("role") == "user" and msg.get("content") == request.message_content:
+            selected_message = msg
+            actual_index = idx
+            break
     
-    # Verify the message content matches (security check)
-    if selected_message.get("content") != request.message_content:
-        raise HTTPException(status_code=400, detail="Message content mismatch")
+    if selected_message is None:
+        raise HTTPException(status_code=400, detail="Message not found or not a user message")
     
     # Update the question with the submitted answer
     target_question["student_solution"] = request.message_content
     target_question["submitted_chat_id"] = request.chat_id
-    target_question["submitted_message_index"] = request.message_index
+    target_question["submitted_message_index"] = actual_index
     target_question["submitted_at"] = datetime.now(timezone.utc).isoformat()
     target_question["attempts"] = target_question.get("attempts", 0) + 1
     
@@ -525,7 +527,7 @@ async def submit_answer(
         "message": "Answer submitted successfully",
         "submitted_at": target_question["submitted_at"],
         "chat_id": request.chat_id,
-        "message_index": request.message_index,
+        "message_index": actual_index,
         "attempts": target_question["attempts"]
     }
 

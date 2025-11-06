@@ -1,75 +1,88 @@
-import React from "react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
-import logo from "../assets/alaaska_logo.png";
+import React, { useState, useEffect } from 'react';
+import ChatInterface from './ChatInterface';
+import api from '../api/axios';
 
-export default function ChatView({
-  messages,
-  typingText,
-  isLoading,
-  sendMessage,
-  userInput,
-  setUserInput,
-  inputRef,
-  messagesEndRef,
-}) {
+export default function ChatView({ activeChatId, onNewChat }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeChatId) {
+      loadConversation(activeChatId);
+    } else {
+      setMessages([]);
+    }
+  }, [activeChatId]);
+
+  const loadConversation = async (chatId) => {
+    try {
+      const res = await api.get(`/conversation/${chatId}`);
+      
+      // ✅ Handle new response format with messages and metadata
+      const conversationMessages = res.data.messages || res.data || [];
+      
+      // Filter out system messages for display
+      const filteredMessages = conversationMessages.filter(msg => msg.role !== 'system');
+      setMessages(filteredMessages);
+    } catch (err) {
+      console.error('Failed to load conversation:', err);
+      setMessages([]);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const userMessage = input.trim();
+    setInput('');
+    
+    // Add user message immediately
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    
+    // Add loading indicator
+    setMessages(prev => [...prev, { role: 'assistant', content: '', isStreaming: true }]);
+    setIsLoading(true);
+
+    try {
+      const res = await api.post('/chat', {
+        message: userMessage,
+        chat_id: activeChatId || undefined,
+      });
+
+      // Remove loading indicator and add actual response
+      setMessages(prev => {
+        const withoutLoader = prev.slice(0, -1);
+        return [...withoutLoader, { role: 'assistant', content: res.data.response }];
+      });
+
+      // If new chat was created, notify parent
+      if (res.data.chat_id && res.data.chat_id !== activeChatId) {
+        onNewChat?.(res.data.chat_id);
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      
+      // Remove loading indicator and show error
+      setMessages(prev => {
+        const withoutLoader = prev.slice(0, -1);
+        return [...withoutLoader, { 
+          role: 'assistant', 
+          content: 'Sorry, I encountered an error. Please try again.' 
+        }];
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="container">
-      <div className="main">
-        <div className="chatbox">
-          <div className="messages">
-            <div className="messages-inner">
-              {messages
-                .filter((msg) => msg.role !== "system")
-                .map((msg, i) => (
-                  <div key={i} className={`message ${msg.role === "user" ? "user-message" : "assistant-message"}`}>
-                    {msg.role === "assistant" ? (
-                      <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.content || "")) }} />
-                    ) : (
-                      msg.content
-                    )}
-                  </div>
-                ))}
-              {typingText ? (
-                <div className="message assistant-message">
-                  <span dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(typingText)) }} />
-                </div>
-              ) : (
-                isLoading && (
-                  <div className="message assistant-message">
-                    <div className="typing-indicator-with-logo">
-                      <img src={logo} alt="Alaaska Logo" className="spinning-logo" />
-                      <span className="typing-text">typing...</span>
-                    </div>
-                  </div>
-                )
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </div>
-
-          <div className="input-container">
-            <textarea
-              ref={inputRef}
-              placeholder="Ask something..."
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              rows={3}
-              maxLength={1000}
-              aria-label="Type your message"
-            />
-            <button className="send-button" onClick={sendMessage} title="Send" aria-label="Send message">
-              ➤
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ChatInterface
+      chatId={activeChatId}
+      messages={messages}
+      input={input}
+      setInput={setInput}
+      sendMessage={sendMessage}
+    />
   );
 }
