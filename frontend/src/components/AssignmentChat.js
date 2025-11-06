@@ -1,217 +1,163 @@
-import React, { useState, useEffect, useRef } from "react";
-import axios from "axios";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
-import "../styles/assignments.css";
+import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import api from '../api/axios';
 
 const BACKEND_URL = process.env.REACT_APP_API_URL || '';
 
 function AssignmentChat({ chat, getToken, onClose, onReset }) {
   const [messages, setMessages] = useState([]);
-  const [userInput, setUserInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [hoveredMessageId, setHoveredMessageId] = useState(null);
-  const [notification, setNotification] = useState({ show: false, message: "", type: "info" });
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-
-  const showNotification = (message, type = "info") => {
-    setNotification({ show: true, message, type });
-    setTimeout(() => setNotification({ show: false, message: "", type: "info" }), 4000);
-  };
 
   useEffect(() => {
-    loadMessages();
+    if (chat?.chat_id) {
+      loadMessages();
+    }
   }, [chat]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottom();
   }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   const loadMessages = async () => {
     try {
-      const token = await getToken();
-      const res = await axios.get(
-        `${BACKEND_URL}/conversation/${chat.chat_id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.get(`/conversation/${chat.chat_id}`);
+      const filtered = (Array.isArray(res.data) ? res.data : []).filter(
+        (m) => m.role !== 'system'
       );
-      setMessages(res.data);
+      setMessages(filtered);
     } catch (err) {
-      console.error("Failed to load messages", err);
-      showNotification("Failed to load chat messages", "error");
+      console.error('Failed to load messages:', err);
     }
   };
 
-  const sendMessage = async () => {
-    if (!userInput.trim()) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!input.trim()) return;
 
-    const userMsg = { role: "user", content: userInput };
-    setMessages((prev) => [...prev, userMsg]);
-    setUserInput("");
-    setIsLoading(true);
+    const userMessage = input.trim();
+    setInput('');
+    setLoading(true);
 
     try {
-      const token = await getToken();
-      const res = await axios.post(
-        `${BACKEND_URL}/chat`,
-        { message: userInput, chat_id: chat.chat_id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.post('/chat', {
+        message: userMessage,
+        chat_id: chat.chat_id,
+      });
 
-      const history = res.data.history;
-      setMessages(history);
+      if (res.data.messages) {
+        const filtered = res.data.messages.filter((m) => m.role !== 'system');
+        setMessages(filtered);
+      }
     } catch (err) {
-      console.error("Failed to send message", err);
-      showNotification("Failed to send message", "error");
+      console.error('Failed to send message:', err);
+      alert('Failed to send message');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const markAsSolution = async (messageIndex) => {
-    const message = messages[messageIndex];
-    if (message.role !== "user") return;
-
-    try {
-      const token = await getToken();
-      await axios.post(
-        `${BACKEND_URL}/assignments/chats/${chat.assignment_chat_id}/mark-solution`,
-        {
-          message_id: `msg_${messageIndex}`,
-          assignment_chat_id: chat.assignment_chat_id
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      showNotification("Solution marked successfully! ✓", "success");
-      
-      // Update message to show it's marked as solution
-      setMessages((prev) => 
-        prev.map((msg, idx) => 
-          idx === messageIndex 
-            ? { ...msg, markedAsSolution: true }
-            : msg
-        )
-      );
-    } catch (err) {
-      console.error("Failed to mark solution", err);
-      showNotification("Failed to mark solution", "error");
-    }
-  };
-
-  const handleReset = async () => {
-    if (!window.confirm("Are you sure you want to reset this question? This will start a new chat.")) {
+  const handleMarkAsAnswer = async (messageIndex, messageContent) => {
+    if (!window.confirm('Mark this message as your final answer? This will replace any previous submission.')) {
       return;
     }
 
+    setSubmitting(true);
     try {
-      const token = await getToken();
-      await axios.post(
-        `${BACKEND_URL}/assignments/chats/${chat.assignment_chat_id}/reset`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.post(
+        `/assignments/${chat.assignment_id}/questions/${chat.question_id}/submit-answer`,
+        {
+          chat_id: chat.chat_id,  // Include which chat
+          message_index: messageIndex,
+          message_content: messageContent
+        }
       );
-      showNotification("Question reset successfully!", "success");
-      setTimeout(() => onReset(), 1000);
+
+      alert(`✅ Answer submitted successfully!\nAttempt #${res.data.attempts}\nYou can view it in the Assignments page.`);
     } catch (err) {
-      console.error("Failed to reset question", err);
-      showNotification("Failed to reset question", "error");
+      console.error('Failed to submit answer:', err);
+      alert(err.response?.data?.detail || 'Failed to submit answer');
+    } finally {
+      setSubmitting(false);
     }
   };
 
+  if (!chat) {
+    return (
+      <div className="assignment-chat-container">
+        <p>No chat selected</p>
+      </div>
+    );
+  }
+
   return (
     <div className="assignment-chat-container">
-      {notification.show && (
-        <div className={`notification notification-${notification.type}`}>
-          {notification.message}
-        </div>
-      )}
-
       <div className="assignment-chat-header">
-        <button onClick={onClose} className="back-button">
-          ← Back to Questions
-        </button>
-        <div className="chat-title">
-          <h3>Question {chat.question_order + 1}</h3>
-          {chat.status === "solved" && <span className="status-badge solved">✓ Solved</span>}
+        <div className="chat-header-info">
+          <h3>{chat.summary || 'Assignment Question'}</h3>
+          <span className="chat-subtitle">Question Chat</span>
         </div>
-        <button onClick={handleReset} className="reset-button">
-          Reset Question
-        </button>
+        <div className="chat-header-actions">
+          {onReset && (
+            <button onClick={onReset} className="reset-chat-btn" title="Start new chat">
+              🔄 New Chat
+            </button>
+          )}
+          <button onClick={onClose} className="close-chat-btn" title="Close chat">
+            ✕
+          </button>
+        </div>
       </div>
 
-      <div className="assignment-chat-messages">
-        {messages
-          .filter((msg) => msg.role !== "system")
-          .map((msg, i) => (
-            <div
-              key={i}
-              className={`message ${msg.role === "user" ? "user-message" : "assistant-message"} ${msg.markedAsSolution ? "solution-message" : ""}`}
-              onMouseEnter={() => msg.role === "user" && setHoveredMessageId(i)}
-              onMouseLeave={() => setHoveredMessageId(null)}
-            >
-              {msg.role === "assistant" ? (
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: DOMPurify.sanitize(marked.parse(msg.content || "")),
-                  }}
-                />
-              ) : (
-                <div>
-                  {msg.content}
-                  {msg.markedAsSolution && (
-                    <span className="solution-badge">✓ Marked as Solution</span>
-                  )}
-                </div>
-              )}
-              
-              {msg.role === "user" && hoveredMessageId === i && !msg.markedAsSolution && chat.status !== "solved" && (
-                <div className="message-actions">
-                  <button
-                    onClick={() => markAsSolution(i)}
-                    className="mark-solution-button"
-                    title="Mark as solution"
-                  >
-                    ✓ Mark as Solution
-                  </button>
-                </div>
-              )}
+      <div className="messages-container">
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`message ${msg.role}`}>
+            <div className="message-content">
+              <ReactMarkdown>{msg.content}</ReactMarkdown>
             </div>
-          ))}
-        {isLoading && (
-          <div className="message assistant-message">
-            <div className="typing-indicator">
-              <span className="typing-dot"></span>
-              <span className="typing-dot"></span>
-              <span className="typing-dot"></span>
+            
+            {/* Show "Mark as Final Answer" button only for user messages */}
+            {msg.role === 'user' && (
+              <button
+                onClick={() => handleMarkAsAnswer(idx, msg.content)}
+                className="mark-answer-btn"
+                disabled={submitting}
+                title="Submit this as your final answer"
+              >
+                {submitting ? '⏳ Submitting...' : '📌 Mark as Final Answer'}
+              </button>
+            )}
+          </div>
+        ))}
+        {loading && (
+          <div className="message assistant">
+            <div className="message-content">
+              <em>ALAASKA is thinking...</em>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="assignment-chat-input">
-        <textarea
-          ref={inputRef}
-          placeholder="Type your answer..."
-          value={userInput}
-          onChange={(e) => setUserInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-          rows={3}
-          disabled={chat.status === "solved"}
+      <form onSubmit={handleSubmit} className="chat-input-form">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type your message..."
+          disabled={loading}
+          className="chat-input"
         />
-        <button
-          onClick={sendMessage}
-          disabled={isLoading || !userInput.trim() || chat.status === "solved"}
-          className="send-button"
-        >
+        <button type="submit" disabled={loading || !input.trim()} className="send-btn">
           Send
         </button>
-      </div>
+      </form>
     </div>
   );
 }

@@ -6,6 +6,7 @@ from backend.models_assignments import (
     CreateTemplateRequest, 
     CreateAssignmentRequest, 
     MarkSolutionRequest,
+    SubmitAnswerRequest,
     Question
 )
 from backend.db_assignments import (
@@ -289,9 +290,10 @@ async def get_assignment_details(assignment_id: str, auth: HTTPAuthorizationCred
 async def get_question_chat(
     assignment_id: str,
     question_id: str,
+    reset: bool = False,  # ← Add reset parameter
     auth: HTTPAuthorizationCredentials = Depends(http_bearer)
 ):
-    """Get the chat_id for a specific question"""
+    """Get or create chat for a specific question. If reset=True, archive old chat and create new one."""
     user = await get_current_user(auth)
     user_email = user["email"].lower()
     user_id = user["auth0_id"]
@@ -305,7 +307,7 @@ async def get_question_chat(
     if not student_assignment:
         raise HTTPException(status_code=404, detail="Assignment not found or not accepted")
     
-    # Find the question and its chat_id
+    # Find the question
     question_index = -1
     target_question = None
     
@@ -318,67 +320,26 @@ async def get_question_chat(
     if target_question is None:
         raise HTTPException(status_code=404, detail="Question not found")
     
-    # Check if chat_id exists, if not create it now
-    if "chat_id" not in target_question or not target_question.get("chat_id"):
-        # Get assignment details for context
-        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+    # Handle reset: move old chat to old_chats array
+    if reset and target_question.get("chat_id"):
+        old_chat_id = target_question["chat_id"]
         
-        # Create chat_id and conversation now
-        chat_id = str(uuid.uuid4())
+        # Initialize old_chats array if not exists
+        if "old_chats" not in target_question:
+            target_question["old_chats"] = []
         
-        # BACKWARD COMPATIBILITY
-        question_number = target_question.get('number', str(question_index + 1))
-        question_text = target_question.get('prompt_md', target_question.get('question_text', ''))
+        # Add old chat to old_chats array (no soft delete, just archive)
+        target_question["old_chats"].append(old_chat_id)
         
-        # Prepare hints text
-        hints_text = ""
-        if target_question.get('hints') and len(target_question['hints']) > 0:
-            hints_text = "\n\nAvailable hints for this question:\n" + "\n".join([f"- {hint}" for hint in target_question['hints']])
+        # Clear current chat_id to force creation of new one
+        target_question["chat_id"] = None
         
-        # Create conversation
-        initial_messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own."
-                    "Keep the conversation going with a question at the end your replies."
-                    "Identify the student's level with guiding questions about the topic they are inquiring about."
-                    "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
-                    "Discuss only academic topics and nothing else."
-                    f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
-                )
-            },
-            {
-                "role": "assistant",
-                "content": f"""Hi! I'm here to help you work through this assignment question:
-
-**Question {question_number}:** {question_text}
-
-Before we dive in, I'd like to understand your initial thoughts. What's your first impression of this question? What concepts or ideas come to mind when you read it?
-
-Take your time - there's no rush. Let's work through this together! 🎯"""
-            }
-        ]
+        # Reset attempts and solution
+        target_question["attempts"] = 0
+        target_question["student_solution"] = None
+        target_question["is_correct"] = None
         
-        conversation_doc = {
-            "chat_id": chat_id,
-            "user_id": user_id,
-            "messages": initial_messages,
-            "summary": f"{assignment['title']} - Q{question_number}",
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc),
-            "is_deleted": False,
-            "assignment_id": assignment_id,
-            "question_id": question_id,
-            "is_assignment_chat": True
-        }
-        
-        await conversations_collection.insert_one(conversation_doc)
-        
-        # Update student assignment with chat_id
-        target_question["chat_id"] = chat_id
-        student_assignment["questions"][question_index] = target_question
-        
+        # Update in database
         await student_assignments_collection.update_one(
             {
                 "assignment_id": assignment_id,
@@ -386,22 +347,186 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
             },
             {
                 "$set": {
-                    "questions": student_assignment["questions"]
+                    f"questions.{question_index}": target_question
                 }
             }
         )
-        
-        return {
-            "chat_id": chat_id,
-            "prompt_md": question_text,
-            "number": question_number
-        }
     
-    # Chat already exists
+    # If chat already exists (and not resetting), return it
+    if target_question.get("chat_id"):
+        existing_chat = await conversations_collection.find_one({
+            "chat_id": target_question["chat_id"]
+        })
+        
+        if existing_chat:
+            return {
+                "chat_id": target_question["chat_id"],
+                "created": False,
+                "reset": False
+            }
+    
+    # Create new chat (same logic for first time or reset)
+    assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment template not found")
+    
+    new_chat_id = str(uuid.uuid4())
+    
+    question_number = target_question.get('number', str(question_index + 1))
+    question_text = target_question.get('prompt_md', target_question.get('question_text', ''))
+    
+    # Prepare hints text
+    hints_text = ""
+    if target_question.get('hints') and len(target_question['hints']) > 0:
+        hints_text = "\n\nAvailable hints for this question:\n" + "\n".join([f"- {hint}" for hint in target_question['hints']])
+    
+    # Create new conversation
+    initial_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own."
+                "Keep the conversation going with a question at the end your replies."
+                "Identify the student's level with guiding questions about the topic they are inquiring about."
+                "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
+                "Discuss only academic topics and nothing else."
+                f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
+            )
+        },
+        {
+            "role": "assistant",
+            "content": f"""Hi! Let's work on this question together:
+
+**Question {question_number}:** {question_text}
+
+What are your initial thoughts? Feel free to share your approach or ask any questions! 🎯"""
+        }
+    ]
+    
+    conversation_doc = {
+        "chat_id": new_chat_id,
+        "user_id": user_id,
+        "messages": initial_messages,
+        "summary": f"{assignment['title']} - Q{question_number}",
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "is_deleted": False,
+        "assignment_id": assignment_id,
+        "question_id": question_id,
+        "is_assignment_chat": True
+    }
+    
+    await conversations_collection.insert_one(conversation_doc)
+    
+    # Update student assignment with new chat_id
+    target_question["chat_id"] = new_chat_id
+    student_assignment["questions"][question_index] = target_question
+    
+    await student_assignments_collection.update_one(
+        {
+            "assignment_id": assignment_id,
+            "student_email": user_email
+        },
+        {
+            "$set": {
+                "questions": student_assignment["questions"]
+            }
+        }
+    )
+    
     return {
-        "chat_id": target_question["chat_id"],
-        "prompt_md": target_question.get("prompt_md", target_question.get("question_text", "")),
-        "number": target_question.get("number", "")
+        "chat_id": new_chat_id,
+        "created": True,
+        "reset": reset
+    }
+
+@router.post("/assignments/{assignment_id}/questions/{question_id}/submit-answer")
+async def submit_answer(
+    assignment_id: str,
+    question_id: str,
+    request: SubmitAnswerRequest,
+    auth: HTTPAuthorizationCredentials = Depends(http_bearer)
+):
+    """Submit a message as the final answer for a question"""
+    user = await get_current_user(auth)
+    user_email = user["email"].lower()
+    
+    # Get student assignment
+    student_assignment = await student_assignments_collection.find_one({
+        "assignment_id": assignment_id,
+        "student_email": user_email
+    })
+    
+    if not student_assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found or not accepted")
+    
+    # Find the question
+    question_index = -1
+    target_question = None
+    
+    for idx, question in enumerate(student_assignment["questions"]):
+        if question["question_id"] == question_id:
+            question_index = idx
+            target_question = question
+            break
+    
+    if target_question is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    # Verify the chat belongs to this question (current or old)
+    valid_chat_ids = [target_question.get("chat_id")] + target_question.get("old_chats", [])
+    valid_chat_ids = [cid for cid in valid_chat_ids if cid]  # Remove None values
+    
+    if request.chat_id not in valid_chat_ids:
+        raise HTTPException(status_code=400, detail="Chat does not belong to this question")
+    
+    # Verify the message exists in the specified chat
+    chat = await conversations_collection.find_one({
+        "chat_id": request.chat_id
+    })
+    
+    if not chat:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    
+    # Verify message index is valid and is a user message
+    messages = chat.get("messages", [])
+    if request.message_index >= len(messages):
+        raise HTTPException(status_code=400, detail="Invalid message index")
+    
+    selected_message = messages[request.message_index]
+    if selected_message.get("role") != "user":
+        raise HTTPException(status_code=400, detail="Can only submit user messages as answers")
+    
+    # Verify the message content matches (security check)
+    if selected_message.get("content") != request.message_content:
+        raise HTTPException(status_code=400, detail="Message content mismatch")
+    
+    # Update the question with the submitted answer
+    target_question["student_solution"] = request.message_content
+    target_question["submitted_chat_id"] = request.chat_id
+    target_question["submitted_message_index"] = request.message_index
+    target_question["submitted_at"] = datetime.now(timezone.utc).isoformat()
+    target_question["attempts"] = target_question.get("attempts", 0) + 1
+    
+    # Update in database
+    await student_assignments_collection.update_one(
+        {
+            "assignment_id": assignment_id,
+            "student_email": user_email
+        },
+        {
+            "$set": {
+                f"questions.{question_index}": target_question
+            }
+        }
+    )
+    
+    return {
+        "message": "Answer submitted successfully",
+        "submitted_at": target_question["submitted_at"],
+        "chat_id": request.chat_id,
+        "message_index": request.message_index,
+        "attempts": target_question["attempts"]
     }
 
 @router.post("/assignments/{assignment_id}/questions/{question_id}/solution")

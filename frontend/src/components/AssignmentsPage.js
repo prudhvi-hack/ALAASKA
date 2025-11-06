@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import api from '../api/axios';
-import '../styles/assignments.css'
+import '../styles/assignments.css';
+
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,14 +51,32 @@ export default function AssignmentsPage() {
     }
   };
 
-  const openQuestionChat = async (questionId, questionNumber) => {
+  const openQuestionChat = async (questionId, questionNumber, reset = false) => {
     try {
+      console.log(`[AssignmentsPage] ${reset ? 'Resetting' : 'Opening'} chat for question:`, questionId);
+      
+      if (reset) {
+        const confirmed = window.confirm(
+          `Start a new chat for Question ${questionNumber}? Your current conversation will be saved in history.`
+        );
+        if (!confirmed) return;
+      }
+      
       const res = await api.get(
-        `/assignments/${selectedAssignment.assignment_id}/questions/${questionId}/chat`
+        `/assignments/${selectedAssignment.assignment_id}/questions/${questionId}/chat`,
+        { params: { reset } }
       );
+      
+      console.log('[AssignmentsPage] Got chat_id:', res.data.chat_id);
+      
+      if (reset) {
+        alert('New chat started! Your previous conversation is saved.');
+      }
+      
       window.location.href = `/?chat_id=${res.data.chat_id}&assignment=true`;
     } catch (err) {
-      alert('Failed to open question chat');
+      console.error('[AssignmentsPage] Failed to open question chat:', err);
+      alert(err.response?.data?.detail || 'Failed to open question chat');
     }
   };
 
@@ -106,12 +127,28 @@ export default function AssignmentsPage() {
                     )}
                   </div>
                   
-                  <div 
-                    className="question-text"
-                    dangerouslySetInnerHTML={{ 
-                      __html: q.prompt_md || q.question_text || 'No question text available' 
-                    }}
-                  />
+                  <div className="question-text">
+                    <ReactMarkdown 
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code({node, inline, className, children, ...props}) {
+                          return inline ? (
+                            <code className="inline-code" {...props}>
+                              {children}
+                            </code>
+                          ) : (
+                            <pre className="code-block">
+                              <code className={className} {...props}>
+                                {children}
+                              </code>
+                            </pre>
+                          );
+                        }
+                      }}
+                    >
+                      {q.prompt_md || q.question_text || 'No question text available'}
+                    </ReactMarkdown>
+                  </div>
                   
                   {q.hints && q.hints.length > 0 && (
                     <details className="hints-section">
@@ -126,22 +163,85 @@ export default function AssignmentsPage() {
                     </details>
                   )}
 
-                  <button
-                    onClick={() => openQuestionChat(q.question_id, q.number || (idx + 1))}
-                    className="work-on-question-button"
-                  >
-                    💬 Work on this Question
-                  </button>
-
+                  {/* ✅ UPDATED: Show submission if exists */}
                   {q.student_solution && (
                     <div className="student-solution-box">
-                      <strong>Your Solution:</strong>
-                      <p>{q.student_solution}</p>
-                      <span className={`solution-status ${q.is_correct ? 'correct' : 'pending'}`}>
-                        {q.is_correct ? '✓ Correct' : '○ Submitted - Pending Review'}
-                      </span>
+                      <div className="solution-header">
+                        <strong>📝 Your Submitted Answer</strong>
+                        {q.submitted_at && (
+                          <span className="submission-time">
+                            {new Date(q.submitted_at).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="solution-content">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            code({node, inline, className, children, ...props}) {
+                              return inline ? (
+                                <code className="inline-code" {...props}>
+                                  {children}
+                                </code>
+                              ) : (
+                                <pre className="code-block">
+                                  <code className={className} {...props}>
+                                    {children}
+                                  </code>
+                                </pre>
+                              );
+                            }
+                          }}
+                        >
+                          {q.student_solution}
+                        </ReactMarkdown>
+                      </div>
+                      
+                      <div className="solution-status-row">
+                        <span className={`solution-status ${
+                          q.is_correct === true ? 'correct' : 
+                          q.is_correct === false ? 'incorrect' : 
+                          'pending'
+                        }`}>
+                          {q.is_correct === true ? '✓ Correct' : 
+                           q.is_correct === false ? '✗ Incorrect' : 
+                           '○ Pending Review'}
+                        </span>
+                        
+                        {q.attempts > 0 && (
+                          <span className="attempts-badge">
+                            Submission #{q.attempts}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {q.feedback && (
+                        <div className="instructor-feedback">
+                          <strong>💬 Instructor Feedback:</strong>
+                          <p>{q.feedback}</p>
+                        </div>
+                      )}
                     </div>
                   )}
+
+                  <div className="question-card-actions">
+                    <button
+                      onClick={() => openQuestionChat(q.question_id, q.number || (idx + 1), false)}
+                      className="work-on-question-button"
+                    >
+                      💬 {q.student_solution ? 'Continue Working' : 'Work on this Question'}
+                    </button>
+                    
+                    {q.chat_id && (
+                      <button
+                        onClick={() => openQuestionChat(q.question_id, q.number || (idx + 1), true)}
+                        className="new-chat-button-small"
+                      >
+                        🔄 New Chat
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
