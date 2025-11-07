@@ -5,6 +5,7 @@ from backend.admin import require_admin
 from backend.models_assignments import (
     CreateTemplateRequest, 
     CreateAssignmentRequest, 
+    UpdateTemplateRequest,
     MarkSolutionRequest,
     SubmitAnswerRequest,
     Question
@@ -667,3 +668,92 @@ async def get_assignment_chats(assignment_id: str, auth: HTTPAuthorizationCreden
         })
     
     return {"chats": chats}
+
+@router.put("/assignment-templates/{template_id}")
+async def update_assignment_template(
+    template_id: str,
+    request: UpdateTemplateRequest,
+    user: dict = Depends(require_admin)
+):
+    """Update an existing assignment template (admin only)"""
+    # Check if template exists
+    existing = await templates_collection.find_one({"template_id": template_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Update template
+    updated_doc = {
+        "title": request.title,
+        "description": request.description,
+        "questions": [
+            {
+                "question_id": q.question_id or str(uuid.uuid4()),
+                "number": q.number,
+                "prompt_md": q.prompt_md,
+                "marks": float(q.marks),
+                "hints": q.hints or []
+            }
+            for q in request.questions
+        ],
+        "updated_by": user["email"],
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    await templates_collection.update_one(
+        {"template_id": template_id},
+        {"$set": updated_doc}
+    )
+    
+    return {
+        "message": "Template updated successfully",
+        "template_id": template_id
+    }
+
+@router.delete("/assignment-templates/{template_id}")
+async def delete_assignment_template(
+    template_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Delete an assignment template (admin only)"""
+    # Check if template is used by any assignments
+    assignment_count = await assignments_collection.count_documents({"template_id": template_id})
+    if assignment_count > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot delete template. It is used by {assignment_count} assignment(s). Delete those assignments first."
+        )
+    
+    result = await templates_collection.delete_one({"template_id": template_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return {"message": "Template deleted successfully"}
+
+@router.delete("/assignments/{assignment_id}")
+async def delete_assignment(
+    assignment_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Delete an assignment and all student progress (admin only)"""
+    # Check if assignment exists
+    assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    # Delete student assignments
+    student_result = await student_assignments_collection.delete_many({"assignment_id": assignment_id})
+    
+    # Delete assignment conversations (soft delete)
+    await conversations_collection.update_many(
+        {"assignment_id": assignment_id},
+        {"$set": {"is_deleted": True}}
+    )
+    
+    # Delete assignment
+    await assignments_collection.delete_one({"assignment_id": assignment_id})
+    
+    return {
+        "message": "Assignment deleted successfully",
+        "student_assignments_deleted": student_result.deleted_count
+    }

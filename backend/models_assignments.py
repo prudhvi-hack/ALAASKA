@@ -37,6 +37,12 @@ class CreateTemplateRequest(BaseModel):
     description: str
     questions: List[Question]
 
+# ✅ NEW: Update template request
+class UpdateTemplateRequest(BaseModel):
+    title: str
+    description: str
+    questions: List[Question]
+
 class CreateAssignmentRequest(BaseModel):
     template_id: str
     allowed_students: List[str]

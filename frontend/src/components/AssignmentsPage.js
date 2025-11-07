@@ -23,6 +23,12 @@ export default function AssignmentsPage() {
       setError(null);
     } catch (err) {
       console.error('Failed to load assignments:', err);
+      
+      // If session expired, axios interceptor already handled logout
+      if (err.message === 'Session expired') {
+        return;
+      }
+      
       setError('Failed to load assignments');
     } finally {
       setLoading(false);
@@ -53,7 +59,7 @@ export default function AssignmentsPage() {
 
   const openQuestionChat = async (questionId, questionNumber, reset = false) => {
     try {
-      console.log(`[AssignmentsPage] ${reset ? 'Resetting' : 'Opening'} chat for question:`, questionId);
+      // console.log(`[AssignmentsPage] ${reset ? 'Resetting' : 'Opening'} chat for question:`, questionId);
       
       if (reset) {
         const confirmed = window.confirm(
@@ -67,7 +73,7 @@ export default function AssignmentsPage() {
         { params: { reset } }
       );
       
-      console.log('[AssignmentsPage] Got chat_id:', res.data.chat_id);
+      // console.log('[AssignmentsPage] Got chat_id:', res.data.chat_id);
       
       if (reset) {
         alert('New chat started! Your previous conversation is saved.');

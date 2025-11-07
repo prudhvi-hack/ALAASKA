@@ -13,6 +13,149 @@ function AdminPage() {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [expandedDescriptions, setExpandedDescriptions] = useState({});
 
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [editTemplateForm, setEditTemplateForm] = useState({
+    title: '',
+    description: '',
+    questions: []
+  });
+
+  const startEditTemplate = (template) => {
+    setEditingTemplate(template.template_id);
+    setEditTemplateForm({
+      title: template.title,
+      description: template.description,
+      questions: template.questions.map(q => ({
+        question_id: q.question_id,
+        number: q.number,
+        prompt_md: q.prompt_md,
+        marks: q.marks,
+        hints: q.hints || []
+      }))
+    });
+    };
+  
+  const cancelEditTemplate = () => {
+    setEditingTemplate(null);
+    setEditTemplateForm({
+      title: '',
+      description: '',
+      questions: []
+    });
+  };
+
+  const updateTemplate = async () => {
+    const validation = validateTemplate(editTemplateForm);
+    if (!validation.ok) {
+      showNotification(validation.message, 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const payload = {
+        title: editTemplateForm.title,
+        description: editTemplateForm.description,
+        questions: editTemplateForm.questions.map(q => ({
+          question_id: q.question_id,
+          number: q.number.trim(),
+          prompt_md: q.prompt_md,
+          marks: parseFloat(q.marks),
+          hints: q.hints.filter(h => h && h.trim() !== '')
+        }))
+      };
+
+      await api.put(`/assignment-templates/${editingTemplate}`, payload);
+      showNotification('Template updated successfully');
+      cancelEditTemplate();
+      loadTemplates();
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || 'Failed to update template';
+      showNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteTemplate = async (templateId) => {
+    if (!window.confirm('Are you sure you want to delete this template? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.delete(`/assignment-templates/${templateId}`);
+      showNotification('Template deleted successfully');
+      loadTemplates();
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || 'Failed to delete template';
+      showNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteAssignment = async (assignmentId, assignmentTitle) => {
+    if (!window.confirm(`Are you sure you want to delete "${assignmentTitle}"?\n\nThis will delete:\n- The assignment\n- All student progress\n- All chat conversations\n\nThis cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await api.delete(`/assignments/${assignmentId}`);
+      showNotification(`Assignment deleted. ${response.data.student_assignments_deleted} student assignment(s) removed.`);
+      loadAssignments();
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || 'Failed to delete assignment';
+      showNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateEditTemplateQuestion = (index, field, value) => {
+  const newQuestions = [...editTemplateForm.questions];
+  newQuestions[index] = { ...newQuestions[index], [field]: value };
+  setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+};
+
+const addEditTemplateQuestion = () => {
+  setEditTemplateForm({
+    ...editTemplateForm,
+    questions: [...editTemplateForm.questions, { 
+      question_id: '',
+      number: '', 
+      prompt_md: '', 
+      marks: 1, 
+      hints: [] 
+    }]
+  });
+};
+
+  const removeEditTemplateQuestion = (index) => {
+    const newQuestions = editTemplateForm.questions.filter((_, i) => i !== index);
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+  const addEditTemplateHint = (questionIndex) => {
+    const newQuestions = [...editTemplateForm.questions];
+    newQuestions[questionIndex].hints.push('');
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+  const removeEditTemplateHint = (questionIndex, hintIndex) => {
+    const newQuestions = [...editTemplateForm.questions];
+    newQuestions[questionIndex].hints = newQuestions[questionIndex].hints.filter((_, i) => i !== hintIndex);
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+  const updateEditTemplateHint = (questionIndex, hintIndex, value) => {
+    const newQuestions = [...editTemplateForm.questions];
+    newQuestions[questionIndex].hints[hintIndex] = value;
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+
   const [templateForm, setTemplateForm] = useState({
     title: '',
     description: '',
@@ -48,6 +191,8 @@ function AdminPage() {
       const res = await api.get('/admin/list');
       setAdmins(res.data.admins);
     } catch (err) {
+      if (err.message === 'Session expired') return;
+      console.error('Failed to load admins:', err);
       showNotification('Failed to load admins', 'error');
     }
   };
@@ -57,6 +202,7 @@ function AdminPage() {
       const res = await api.get('/assignment-templates');
       setTemplates(res.data.templates || []);
     } catch (err) {
+      if (err.message === 'Session expired') return;
       console.error('Failed to load templates:', err);
     }
   };
@@ -66,6 +212,7 @@ function AdminPage() {
       const res = await api.get('/admin/assignments');
       setAssignments(res.data.assignments || []);
     } catch (err) {
+      if (err.message === 'Session expired') return;
       console.error('Failed to load assignments:', err);
     }
   };
@@ -510,9 +657,139 @@ function AdminPage() {
               <h3>Existing Templates ({templates.length})</h3>
               {templates.map((template, idx) => (
                 <div key={idx} className="template-card">
-                  <h4>{template.title}</h4>
-                  <p>{template.description}</p>
-                  <span className="template-meta">{template.questions?.length || 0} questions</span>
+                  {editingTemplate === template.template_id ? (
+                    // ✅ Edit mode
+                    <div className="edit-template-form" style={{ width: '100%' }}>
+                      <input
+                        type="text"
+                        placeholder="Template Title"
+                        value={editTemplateForm.title}
+                        onChange={(e) => setEditTemplateForm({ ...editTemplateForm, title: e.target.value })}
+                        className="admin-input"
+                        style={{ marginBottom: '0.5rem' }}
+                      />
+                      
+                      <textarea
+                        placeholder="Template Description"
+                        value={editTemplateForm.description}
+                        onChange={(e) => setEditTemplateForm({ ...editTemplateForm, description: e.target.value })}
+                        className="admin-textarea"
+                        rows="2"
+                        style={{ marginBottom: '1rem' }}
+                      />
+
+                      <h4 style={{ marginBottom: '0.5rem' }}>Questions</h4>
+                      {editTemplateForm.questions.map((question, qIdx) => (
+                        <div key={qIdx} className="question-form" style={{ marginBottom: '1rem' }}>
+                          <div className="question-header">
+                            <h5>Question {qIdx + 1}</h5>
+                            {editTemplateForm.questions.length > 1 && (
+                              <button onClick={() => removeEditTemplateQuestion(qIdx)} className="remove-button-small">
+                                Remove
+                              </button>
+                            )}
+                          </div>
+
+                          <input
+                            type="text"
+                            placeholder="Question Number (e.g., 1 or 1.1)"
+                            value={question.number}
+                            onChange={(e) => updateEditTemplateQuestion(qIdx, 'number', e.target.value)}
+                            className="admin-input"
+                            style={{ marginBottom: '0.5rem' }}
+                          />
+
+                          <input
+                            type="number"
+                            placeholder="Marks"
+                            min="0"
+                            step="0.5"
+                            value={question.marks}
+                            onChange={(e) => updateEditTemplateQuestion(qIdx, 'marks', e.target.value)}
+                            className="admin-input"
+                            style={{ marginBottom: '0.5rem' }}
+                          />
+                          
+                          <textarea
+                            placeholder="Question text (Markdown supported)"
+                            value={question.prompt_md}
+                            onChange={(e) => updateEditTemplateQuestion(qIdx, 'prompt_md', e.target.value)}
+                            className="admin-textarea"
+                            rows="2"
+                            style={{ marginBottom: '0.5rem' }}
+                          />
+
+                          <div className="hints-section">
+                            <h6>Hints</h6>
+                            {question.hints.map((hint, hIdx) => (
+                              <div key={hIdx} className="hint-input-group">
+                                <input
+                                  type="text"
+                                  placeholder={`Hint ${hIdx + 1}`}
+                                  value={hint}
+                                  onChange={(e) => updateEditTemplateHint(qIdx, hIdx, e.target.value)}
+                                  className="admin-input"
+                                />
+                                <button onClick={() => removeEditTemplateHint(qIdx, hIdx)} className="remove-button-small">
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                            <button onClick={() => addEditTemplateHint(qIdx)} className="add-button-small">
+                              + Add Hint
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button onClick={addEditTemplateQuestion} className="add-button" style={{ marginBottom: '1rem' }}>
+                        + Add Question
+                      </button>
+
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button 
+                          onClick={updateTemplate} 
+                          disabled={loading}
+                          className="admin-button"
+                          style={{ flex: 1 }}
+                        >
+                          {loading ? 'Updating...' : 'Save Changes'}
+                        </button>
+                        <button 
+                          onClick={cancelEditTemplate}
+                          className="cancel-button"
+                          style={{ flex: 1 }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // ✅ View mode
+                    <>
+                      <div>
+                        <h4>{template.title}</h4>
+                        <p>{template.description}</p>
+                        <span className="template-meta">{template.questions?.length || 0} questions</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                        <button
+                          onClick={() => startEditTemplate(template)}
+                          className="edit-button"
+                          disabled={loading}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteTemplate(template.template_id)}
+                          className="remove-button"
+                          disabled={loading}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -562,7 +839,10 @@ function AdminPage() {
             <div className="assignments-list">
               <h3>Created Assignments ({assignments.length})</h3>
               {assignments.map((assignment, idx) => (
-                <div key={idx} className="assignment-card-admin">
+                <div 
+                  key={idx} 
+                  className={`assignment-card-admin ${editingAssignment === assignment.assignment_id ? 'edit-mode' : 'view-mode'}`}
+                >
                   {editingAssignment === assignment.assignment_id ? (
                     // ✅ Edit mode
                     <div className="edit-assignment-form">
@@ -577,7 +857,7 @@ function AdminPage() {
                         rows="6"
                         style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}
                       />
-                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
+                      <div className="button-group">
                         <button 
                           onClick={updateAssignment} 
                           disabled={loading}
@@ -596,7 +876,7 @@ function AdminPage() {
                       </div>
                     </div>
                   ) : (
-                    // ✅ View mode with expandable description
+                    // ✅ View mode
                     <>
                       <div className="assignment-card-content">
                         <h4>{assignment.title}</h4>
@@ -636,6 +916,14 @@ function AdminPage() {
                           className="export-pdf-button"
                         >
                           📄 Export PDF
+                        </button>
+
+                        <button
+                          onClick={() => deleteAssignment(assignment.assignment_id, assignment.title)}
+                          disabled={loading}
+                          className="remove-button"
+                        >
+                          🗑️ Delete
                         </button>
                       </div>
                     </>

@@ -4,8 +4,7 @@ import AssignmentsPage from './components/AssignmentsPage';
 import AdminPage from './components/AdminPage';
 import ChatInterface from './components/ChatInterface';
 import { useAuth } from './contexts/AuthContext';
-import api, { setupAxiosInterceptors } from './api/axios';
-
+import api from './api/axios'; 
 function App() {
   const { user, isAuthenticated, isLoading: authLoading, isAdmin, setIsAdmin, getToken, loginWithRedirect, logout } = useAuth();
 
@@ -25,9 +24,6 @@ function App() {
   
   const messagesEndRef = useRef(null);
 
-  useEffect(() => {
-    setupAxiosInterceptors(getToken);
-  }, [getToken]);
 
   const showNotification = (message, type = "error") => {
     setNotification({ show: true, message, type });
@@ -57,14 +53,53 @@ function App() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const chatIdFromUrl = urlParams.get('chat_id');
-    
-    if (chatIdFromUrl) {
-      setCurrentView('chat');
-      loadConversation(chatIdFromUrl);
-      window.history.replaceState({}, document.title, '/');
-    }
+    const initialize = async () => {
+      try {
+        setIsLoading(true);
+
+        // Make API calls - if they fail due to token issues, 
+        // axios interceptor will handle logout automatically
+        try {
+          const [convRes, adminRes] = await Promise.all([
+            api.get('/conversations'),
+            api.get('/admin/check')
+          ]);
+
+          const fetchedConversations = convRes.data || [];
+          // console.log('Fetched conversations:', fetchedConversations);
+
+          setConversations(fetchedConversations);
+          setIsAdmin(adminRes.data.is_admin);
+
+          const params = new URLSearchParams(window.location.search);
+          const urlChatId = params.get('chat_id');
+
+          if (urlChatId) {
+            await loadConversation(urlChatId);
+          } else if (fetchedConversations.length > 0) {
+            await loadConversation(fetchedConversations[0].chat_id);
+          } else {
+            await startNewChat();
+          }
+        } catch (apiError) {
+          // If error is 'Session expired', axios interceptor already handled logout
+          if (apiError.message === 'Session expired') {
+            console.log('Session expired, user will be redirected to login');
+            return;
+          }
+          
+          // For other errors, show error but don't crash
+          console.error('API call failed:', apiError);
+        }
+
+      } catch (err) {
+        console.error('Initialization failed:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initialize();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 

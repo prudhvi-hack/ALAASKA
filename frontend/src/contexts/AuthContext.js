@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
+import { setupAxiosAuth } from '../api/axios';
 
 const AuthContext = createContext(null);
-
 
 export const AuthProvider = ({ children }) => {
   const { getAccessTokenSilently, isAuthenticated, loginWithRedirect, logout, user, isLoading } = useAuth0();
@@ -49,6 +49,18 @@ export const AuthProvider = ({ children }) => {
     setIsAdmin(false);
     logout({ returnTo: window.location.origin });
   }, [logout]);
+
+  // ✅ Setup axios with auth functions when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      const auth0Instance = {
+        isAuthenticated,
+        logout: handleLogout
+      };
+      
+      setupAxiosAuth(getToken, auth0Instance);
+    }
+  }, [isAuthenticated, getToken, handleLogout]);
 
   const value = {
     user,
