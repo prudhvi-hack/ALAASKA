@@ -5,6 +5,7 @@ import AdminPage from './components/AdminPage';
 import ChatInterface from './components/ChatInterface';
 import { useAuth } from './contexts/AuthContext';
 import api from './api/axios'; 
+
 function App() {
   const { user, isAuthenticated, isLoading: authLoading, isAdmin, setIsAdmin, getToken, loginWithRedirect, logout } = useAuth();
 
@@ -31,7 +32,6 @@ function App() {
     setAutoOpenAssignmentId(assignmentId);
     setAutoScrollToQuestionId(questionId);
     setCurrentView('assignments');
-    // Clear URL params
     window.history.pushState({}, '', '/');
   };
 
@@ -64,7 +64,7 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Check URL params on mount
+  // ✅ FIXED: Single useEffect with proper error handling
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -72,65 +72,52 @@ function App() {
       try {
         setIsLoading(true);
 
-        // Make API calls - if they fail due to token issues, 
-        // axios interceptor will handle logout automatically
+        // Load conversations
+        const convRes = await api.get('/conversations');
+        const fetchedConversations = convRes.data || [];
+        setConversations(fetchedConversations);
+
+        // Check admin status - 403 is EXPECTED for non-admins
         try {
-          const [convRes, adminRes] = await Promise.all([
-            api.get('/conversations'),
-            api.get('/admin/check')
-          ]);
-
-          const fetchedConversations = convRes.data || [];
-          // console.log('Fetched conversations:', fetchedConversations);
-
-          setConversations(fetchedConversations);
+          const adminRes = await api.get('/admin/check');
           setIsAdmin(adminRes.data.is_admin);
-
-          const params = new URLSearchParams(window.location.search);
-          const urlChatId = params.get('chat_id');
-
-          if (urlChatId) {
-            await loadConversation(urlChatId);
-          } else if (fetchedConversations.length > 0) {
-            await loadConversation(fetchedConversations[0].chat_id);
-          } else {
-            await startNewChat();
-          }
-        } catch (apiError) {
-          // If error is 'Session expired', axios interceptor already handled logout
-          if (apiError.message === 'Session expired') {
+        } catch (adminErr) {
+          // ✅ 403 is expected for non-admin users, not an error
+          if (adminErr.response?.status === 403) {
+            console.log('User is not an admin (expected)');
+            setIsAdmin(false);
+          } else if (adminErr.message === 'Session expired') {
             console.log('Session expired, user will be redirected to login');
             return;
+          } else {
+            console.error('Admin check failed:', adminErr);
+            setIsAdmin(false);
           }
-          
-          // For other errors, show error but don't crash
-          console.error('API call failed:', apiError);
+        }
+
+        // Load initial chat
+        const params = new URLSearchParams(window.location.search);
+        const urlChatId = params.get('chat_id');
+
+        if (urlChatId) {
+          await loadConversation(urlChatId);
+        } else if (fetchedConversations.length > 0) {
+          await loadConversation(fetchedConversations[0].chat_id);
+        } else {
+          await startNewChat();
         }
 
       } catch (err) {
-        console.error('Initialization failed:', err);
+        // ✅ Handle session expiry
+        if (err.message === 'Session expired') {
+          console.log('Session expired, user will be redirected to login');
+          return;
+        }
+        
+        // ✅ For other errors, log but don't crash - conversations are loaded
+        console.error('Initialization error:', err);
       } finally {
         setIsLoading(false);
-      }
-    };
-
-    initialize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const initialize = async () => {
-      try {
-        const [convRes, adminRes] = await Promise.all([
-          api.get('/conversations'),
-          api.get('/admin/check')
-        ]);
-        setConversations(convRes.data);
-        setIsAdmin(!!adminRes.data.is_admin);
-      } catch (err) {
-        console.error('Initialization failed:', err);
       }
     };
 
@@ -556,7 +543,6 @@ function App() {
             </div>
           </div>
           
-          {/* ✅ UPDATED: Use component-based rendering */}
           {currentView === 'admin' ? (
             <AdminPage />
           ) : currentView === 'assignments' ? (

@@ -90,8 +90,6 @@ def verify_token(token: str):
         logger.error(f"[AUTH] Token verification failed: {type(e).__name__}: {str(e)}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# Replace lines 105-118 with this updated version:
-
 async def get_userinfo_from_token(payload: dict) -> dict:
     """Extract user info directly from JWT payload (no API call needed!)"""
     logger.info("[AUTH] Extracting user info from token payload")
@@ -176,7 +174,9 @@ async def get_or_create_user(auth0_id: str, email: str, name: str) -> dict:
                 "auth0_id": auth0_id,
                 "username": name,
                 "email": email,
-                "created_at": datetime.now(timezone.utc)
+                "created_at": datetime.now(timezone.utc),
+                "is_admin": False,
+                "is_grader": False
             },
             "$set": {
                 "last_login": datetime.now(timezone.utc)
@@ -219,10 +219,19 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(http_bea
         name = user_info.get("name") or user_id
 
         # Step 3: Get or create user in database (single optimized query)
-        await get_or_create_user(user_id, email, name)
+        # ✅ FIXED: Get the full user document with is_admin and is_grader
+        user_doc = await get_or_create_user(user_id, email, name)
         
         logger.info(f"[AUTH] Returning user data for: {email}")
-        return {"auth0_id": user_id, "username": name, "email": email}
+        
+        # ✅ FIXED: Return all necessary fields including is_admin and is_grader
+        return {
+            "auth0_id": user_id,
+            "username": name,
+            "email": email,
+            "is_admin": user_doc.get("is_admin", False),
+            "is_grader": user_doc.get("is_grader", False)
+        }
         
     except HTTPException as e:
         logger.error(f"[AUTH] HTTPException in get_current_user: {e.status_code} - {e.detail}")
