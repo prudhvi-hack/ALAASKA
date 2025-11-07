@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import api from '../api/axios';
 import '../styles/assignment_chat.css';
 
-export default function ChatInterface({ chatId, messages, input, setInput, sendMessage }) {
+export default function ChatInterface({ chatId, messages, input, setInput, sendMessage, onNavigateToAssignment }) {
   const [metadata, setMetadata] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
@@ -72,6 +72,13 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
     }
   };
 
+  // ✅ NEW: Navigate to assignment
+  const handleNavigateToAssignment = () => {
+    if (metadata?.assignment_id && metadata?.question_id) {
+      onNavigateToAssignment(metadata.assignment_id, metadata.question_id);
+    }
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -92,7 +99,12 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
       <div className="chatbox">
         {/* Assignment banner */}
         {metadata?.is_assignment_chat && (
-          <div className="assignment-chat-banner">
+          <div 
+            className="assignment-chat-banner clickable"
+            onClick={handleNavigateToAssignment}
+            style={{ cursor: 'pointer' }}
+            title="Click to view assignment"
+          >
             <span className="banner-icon">📚</span>
             <div className="banner-info">
               <div className="banner-title">
@@ -102,6 +114,9 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                     ✓ Submitted (Attempt #{metadata.attempts})
                   </span>
                 )}
+              </div>
+              <div className="banner-subtitle" style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                Click to view assignment →
               </div>
             </div>
           </div>

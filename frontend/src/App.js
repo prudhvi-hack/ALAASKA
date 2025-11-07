@@ -21,9 +21,24 @@ function App() {
   
   const [showFullSidebar, setShowFullSidebar] = useState(window.innerWidth > 768);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  const [autoOpenAssignmentId, setAutoOpenAssignmentId] = useState(null);
+  const [autoScrollToQuestionId, setAutoScrollToQuestionId] = useState(null);
   
   const messagesEndRef = useRef(null);
 
+  const handleNavigateToAssignment = (assignmentId, questionId) => {
+    setAutoOpenAssignmentId(assignmentId);
+    setAutoScrollToQuestionId(questionId);
+    setCurrentView('assignments');
+    // Clear URL params
+    window.history.pushState({}, '', '/');
+  };
+
+  const handleClearAutoOpen = () => {
+    setAutoOpenAssignmentId(null);
+    setAutoScrollToQuestionId(null);
+  };
 
   const showNotification = (message, type = "error") => {
     setNotification({ show: true, message, type });
@@ -545,7 +560,11 @@ function App() {
           {currentView === 'admin' ? (
             <AdminPage />
           ) : currentView === 'assignments' ? (
-            <AssignmentsPage />
+            <AssignmentsPage 
+              autoOpenAssignmentId={autoOpenAssignmentId}
+              autoScrollToQuestionId={autoScrollToQuestionId}
+              onClearAutoOpen={handleClearAutoOpen} 
+            />
           ) : (
             <ChatInterface
               chatId={chatId}
@@ -553,6 +572,7 @@ function App() {
               input={userInput}
               setInput={setUserInput}
               sendMessage={sendMessage}
+              onNavigateToAssignment={handleNavigateToAssignment}
             />
           )}
 

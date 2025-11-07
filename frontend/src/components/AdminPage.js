@@ -105,6 +105,8 @@ function AdminPage() {
       const response = await api.delete(`/assignments/${assignmentId}`);
       showNotification(`Assignment deleted. ${response.data.student_assignments_deleted} student assignment(s) removed.`);
       loadAssignments();
+
+      window.location.reload();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || 'Failed to delete assignment';
       showNotification(errorMsg, 'error');

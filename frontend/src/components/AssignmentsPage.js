@@ -4,7 +4,11 @@ import remarkGfm from 'remark-gfm';
 import api from '../api/axios';
 import '../styles/assignments.css';
 
-export default function AssignmentsPage() {
+export default function AssignmentsPage({ 
+  autoOpenAssignmentId = null, 
+  autoScrollToQuestionId = null,
+  onClearAutoOpen = null  // ✅ NEW: Callback to clear auto-open states
+}) {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -15,6 +19,30 @@ export default function AssignmentsPage() {
     loadAssignments();
   }, []);
 
+  // ✅ Auto-open assignment when navigating from chat
+  useEffect(() => {
+    if (autoOpenAssignmentId && assignments.length > 0 && !selectedAssignment) {
+      const assignment = assignments.find(a => a.assignment_id === autoOpenAssignmentId);
+      if (assignment) {
+        loadAssignmentDetails(autoOpenAssignmentId);
+      }
+    }
+  }, [autoOpenAssignmentId, assignments, selectedAssignment]);
+
+  // ✅ Auto-scroll to question after assignment loads
+  useEffect(() => {
+    if (selectedAssignment && autoScrollToQuestionId) {
+      setTimeout(() => {
+        const questionCard = document.querySelector(`[data-question-id="${autoScrollToQuestionId}"]`);
+        if (questionCard) {
+          questionCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          questionCard.classList.add('highlight-question');
+          setTimeout(() => questionCard.classList.remove('highlight-question'), 2000);
+        }
+      }, 300);
+    }
+  }, [selectedAssignment, autoScrollToQuestionId]);
+
   const loadAssignments = async () => {
     try {
       setLoading(true);
@@ -24,7 +52,6 @@ export default function AssignmentsPage() {
     } catch (err) {
       console.error('Failed to load assignments:', err);
       
-      // If session expired, axios interceptor already handled logout
       if (err.message === 'Session expired') {
         return;
       }
@@ -57,10 +84,18 @@ export default function AssignmentsPage() {
     }
   };
 
+  // ✅ UPDATED: Clear auto-open states when going back
+  const handleBackToAssignments = () => {
+    setSelectedAssignment(null);
+    
+    // Clear auto-open states in parent component
+    if (onClearAutoOpen) {
+      onClearAutoOpen();
+    }
+  };
+
   const openQuestionChat = async (questionId, questionNumber, reset = false) => {
     try {
-      // console.log(`[AssignmentsPage] ${reset ? 'Resetting' : 'Opening'} chat for question:`, questionId);
-      
       if (reset) {
         const confirmed = window.confirm(
           `Start a new chat for Question ${questionNumber}? Your current conversation will be saved in history.`
@@ -72,8 +107,6 @@ export default function AssignmentsPage() {
         `/assignments/${selectedAssignment.assignment_id}/questions/${questionId}/chat`,
         { params: { reset } }
       );
-      
-      // console.log('[AssignmentsPage] Got chat_id:', res.data.chat_id);
       
       if (reset) {
         alert('New chat started! Your previous conversation is saved.');
@@ -106,7 +139,8 @@ export default function AssignmentsPage() {
   if (selectedAssignment) {
     return (
       <div className="assignment-detail-container">
-        <button onClick={() => setSelectedAssignment(null)} className="back-button">
+        {/* ✅ UPDATED: Use the new handler */}
+        <button onClick={handleBackToAssignments} className="back-button">
           ← Back to Assignments
         </button>
 
@@ -123,7 +157,11 @@ export default function AssignmentsPage() {
           ) : selectedAssignment.questions && selectedAssignment.questions.length > 0 ? (
             <div className="questions-grid">
               {selectedAssignment.questions.map((q, idx) => (
-                <div key={q.question_id || idx} className="question-card">
+                <div 
+                  key={q.question_id || idx} 
+                  className="question-card"
+                  data-question-id={q.question_id}
+                >
                   <div className="question-card-header">
                     <h4>Question {q.number || (idx + 1)}</h4>
                     {q.marks && (
@@ -156,21 +194,21 @@ export default function AssignmentsPage() {
                     </ReactMarkdown>
                   </div>
                   
-                  {q.hints && q.hints.length > 0 && q.hints.some(hint => hint && hint.trim()) && (  // ✅ Added check for non-empty hints
-                  <details className="hints-section">
-                    <summary className="hints-summary">
-                      💡 Show Hints ({q.hints.filter(h => h && h.trim()).length})  // ✅ Count only non-empty hints
-                    </summary>
-                    <ul className="hints-list">
-                      {q.hints
-                        .filter(hint => hint && hint.trim())  // ✅ Filter out empty hints
-                        .map((hint, hIdx) => (
-                          <li key={hIdx}>{hint}</li>
-                        ))
-                      }
-                    </ul>
-                  </details>
-)}
+                  {q.hints && q.hints.length > 0 && q.hints.some(hint => hint && hint.trim()) && (
+                    <details className="hints-section">
+                      <summary className="hints-summary">
+                        💡 Show Hints ({q.hints.filter(h => h && h.trim()).length})
+                      </summary>
+                      <ul className="hints-list">
+                        {q.hints
+                          .filter(hint => hint && hint.trim())
+                          .map((hint, hIdx) => (
+                            <li key={hIdx}>{hint}</li>
+                          ))
+                        }
+                      </ul>
+                    </details>
+                  )}
 
                   {q.student_solution && (
                     <div className="student-solution-box">
