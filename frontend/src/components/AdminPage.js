@@ -20,143 +20,8 @@ function AdminPage() {
     questions: []
   });
 
-  const startEditTemplate = (template) => {
-    setEditingTemplate(template.template_id);
-    setEditTemplateForm({
-      title: template.title,
-      description: template.description,
-      questions: template.questions.map(q => ({
-        question_id: q.question_id,
-        number: q.number,
-        prompt_md: q.prompt_md,
-        marks: q.marks,
-        hints: q.hints || []
-      }))
-    });
-    };
-  
-  const cancelEditTemplate = () => {
-    setEditingTemplate(null);
-    setEditTemplateForm({
-      title: '',
-      description: '',
-      questions: []
-    });
-  };
-
-  const updateTemplate = async () => {
-    const validation = validateTemplate(editTemplateForm);
-    if (!validation.ok) {
-      showNotification(validation.message, 'error');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const payload = {
-        title: editTemplateForm.title,
-        description: editTemplateForm.description,
-        questions: editTemplateForm.questions.map(q => ({
-          question_id: q.question_id,
-          number: q.number.trim(),
-          prompt_md: q.prompt_md,
-          marks: parseFloat(q.marks),
-          hints: q.hints.filter(h => h && h.trim() !== '')
-        }))
-      };
-
-      await api.put(`/assignment-templates/${editingTemplate}`, payload);
-      showNotification('Template updated successfully');
-      cancelEditTemplate();
-      loadTemplates();
-    } catch (err) {
-      const errorMsg = err.response?.data?.detail || 'Failed to update template';
-      showNotification(errorMsg, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteTemplate = async (templateId) => {
-    if (!window.confirm('Are you sure you want to delete this template? This cannot be undone.')) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      await api.delete(`/assignment-templates/${templateId}`);
-      showNotification('Template deleted successfully');
-      loadTemplates();
-    } catch (err) {
-      const errorMsg = err.response?.data?.detail || 'Failed to delete template';
-      showNotification(errorMsg, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteAssignment = async (assignmentId, assignmentTitle) => {
-    if (!window.confirm(`Are you sure you want to delete "${assignmentTitle}"?\n\nThis will delete:\n- The assignment\n- All student progress\n- All chat conversations\n\nThis cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await api.delete(`/assignments/${assignmentId}`);
-      showNotification(`Assignment deleted. ${response.data.student_assignments_deleted} student assignment(s) removed.`);
-      loadAssignments();
-
-      window.location.reload();
-    } catch (err) {
-      const errorMsg = err.response?.data?.detail || 'Failed to delete assignment';
-      showNotification(errorMsg, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateEditTemplateQuestion = (index, field, value) => {
-  const newQuestions = [...editTemplateForm.questions];
-  newQuestions[index] = { ...newQuestions[index], [field]: value };
-  setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
-};
-
-const addEditTemplateQuestion = () => {
-  setEditTemplateForm({
-    ...editTemplateForm,
-    questions: [...editTemplateForm.questions, { 
-      question_id: '',
-      number: '', 
-      prompt_md: '', 
-      marks: 1, 
-      hints: [] 
-    }]
-  });
-};
-
-  const removeEditTemplateQuestion = (index) => {
-    const newQuestions = editTemplateForm.questions.filter((_, i) => i !== index);
-    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
-  };
-
-  const addEditTemplateHint = (questionIndex) => {
-    const newQuestions = [...editTemplateForm.questions];
-    newQuestions[questionIndex].hints.push('');
-    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
-  };
-
-  const removeEditTemplateHint = (questionIndex, hintIndex) => {
-    const newQuestions = [...editTemplateForm.questions];
-    newQuestions[questionIndex].hints = newQuestions[questionIndex].hints.filter((_, i) => i !== hintIndex);
-    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
-  };
-
-  const updateEditTemplateHint = (questionIndex, hintIndex, value) => {
-    const newQuestions = [...editTemplateForm.questions];
-    newQuestions[questionIndex].hints[hintIndex] = value;
-    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
-  };
-
+  const [graders, setGraders] = useState([]);
+  const [newGraderEmail, setNewGraderEmail] = useState('');
 
   const [templateForm, setTemplateForm] = useState({
     title: '',
@@ -166,10 +31,9 @@ const addEditTemplateQuestion = () => {
 
   const [assignmentForm, setAssignmentForm] = useState({
     template_id: '',
-    student_emails_text: '' // ✅ Changed to textarea input
+    student_emails_text: ''
   });
 
-  // ✅ NEW: State for editing assignments
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [editForm, setEditForm] = useState({
     assignment_id: '',
@@ -180,6 +44,7 @@ const addEditTemplateQuestion = () => {
     loadAdmins();
     loadTemplates();
     loadAssignments();
+    loadGraders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -196,6 +61,17 @@ const addEditTemplateQuestion = () => {
       if (err.message === 'Session expired') return;
       console.error('Failed to load admins:', err);
       showNotification('Failed to load admins', 'error');
+    }
+  };
+
+  const loadGraders = async () => {
+    try {
+      const res = await api.get('/admin/graders');
+      setGraders(res.data.graders);
+    } catch (err) {
+      if (err.message === 'Session expired') return;
+      console.error('Failed to load graders:', err);
+      showNotification('Failed to load graders', 'error');
     }
   };
 
@@ -216,49 +92,6 @@ const addEditTemplateQuestion = () => {
     } catch (err) {
       if (err.message === 'Session expired') return;
       console.error('Failed to load assignments:', err);
-    }
-  };
-  // Add this function after loadAssignments
-
-  const exportAssignmentPDF = async (assignmentId, assignmentTitle) => {
-    try {
-      setLoading(true);
-      showNotification('Generating PDF... This may take a moment', 'info');
-      
-      const response = await api.post(
-        `/assignments/${assignmentId}/export-pdf`,
-        {},
-        {
-          responseType: 'blob' // Important: Tell axios to expect binary data
-        }
-      );
-      
-      // Create a blob from the PDF stream
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      
-      // Create download link
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      
-      // Generate filename
-      const safeTitle = assignmentTitle.replace(/[^a-zA-Z0-9-_ ]/g, '_');
-      link.download = `${safeTitle}_submissions.pdf`;
-      
-      // Trigger download
-      document.body.appendChild(link);
-      link.click();
-      
-      // Cleanup
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      showNotification('PDF downloaded successfully!', 'success');
-    } catch (err) {
-      console.error('Export error:', err);
-      showNotification(err.response?.data?.detail || 'Failed to export PDF', 'error');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -291,6 +124,40 @@ const addEditTemplateQuestion = () => {
       loadAdmins();
     } catch (err) {
       showNotification(err.response?.data?.detail || 'Failed to remove admin', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addGrader = async () => {
+    if (!newGraderEmail.trim()) {
+      showNotification('Please enter an email', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.post('/admin/graders/add', { email: newGraderEmail });
+      showNotification('Grader added successfully');
+      setNewGraderEmail('');
+      loadGraders();
+    } catch (err) {
+      showNotification(err.response?.data?.detail || 'Failed to add grader', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const removeGrader = async (email) => {
+    if (!window.confirm(`Remove grader privileges from ${email}?`)) return;
+
+    try {
+      setLoading(true);
+      await api.delete('/admin/graders/remove', { data: { email } });
+      showNotification('Grader removed successfully');
+      loadGraders();
+    } catch (err) {
+      showNotification(err.response?.data?.detail || 'Failed to remove grader', 'error');
     } finally {
       setLoading(false);
     }
@@ -377,7 +244,7 @@ const addEditTemplateQuestion = () => {
           number: q.number.trim(),
           prompt_md: q.prompt_md,
           marks: parseFloat(q.marks),
-          hints: q.hints.filter(h => h && h.trim() !== '') // ✅ Filter empty hints
+          hints: q.hints.filter(h => h && h.trim() !== '')
         }))
       };
 
@@ -386,7 +253,7 @@ const addEditTemplateQuestion = () => {
       setTemplateForm({
         title: '',
         description: '',
-        questions: [{ number: '', prompt_md: '', marks: 1, hints: [] }] // ✅ Start with empty hints
+        questions: [{ number: '', prompt_md: '', marks: 1, hints: [] }]
       });
       loadTemplates();
     } catch (err) {
@@ -397,7 +264,123 @@ const addEditTemplateQuestion = () => {
     }
   };
 
-  // ✅ NEW: Parse emails from textarea
+  const startEditTemplate = (template) => {
+    setEditingTemplate(template.template_id);
+    setEditTemplateForm({
+      title: template.title,
+      description: template.description,
+      questions: template.questions.map(q => ({
+        question_id: q.question_id,
+        number: q.number,
+        prompt_md: q.prompt_md,
+        marks: q.marks,
+        hints: q.hints || []
+      }))
+    });
+  };
+
+  const cancelEditTemplate = () => {
+    setEditingTemplate(null);
+    setEditTemplateForm({
+      title: '',
+      description: '',
+      questions: []
+    });
+  };
+
+  const updateTemplate = async () => {
+    const validation = validateTemplate(editTemplateForm);
+    if (!validation.ok) {
+      showNotification(validation.message, 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const payload = {
+        title: editTemplateForm.title,
+        description: editTemplateForm.description,
+        questions: editTemplateForm.questions.map(q => ({
+          question_id: q.question_id,
+          number: q.number.trim(),
+          prompt_md: q.prompt_md,
+          marks: parseFloat(q.marks),
+          hints: q.hints.filter(h => h && h.trim() !== '')
+        }))
+      };
+
+      await api.put(`/assignment-templates/${editingTemplate}`, payload);
+      showNotification('Template updated successfully');
+      cancelEditTemplate();
+      loadTemplates();
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || 'Failed to update template';
+      showNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteTemplate = async (templateId) => {
+    if (!window.confirm('Are you sure you want to delete this template? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await api.delete(`/assignment-templates/${templateId}`);
+      showNotification('Template deleted successfully');
+      loadTemplates();
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || 'Failed to delete template';
+      showNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateEditTemplateQuestion = (index, field, value) => {
+    const newQuestions = [...editTemplateForm.questions];
+    newQuestions[index] = { ...newQuestions[index], [field]: value };
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+  const addEditTemplateQuestion = () => {
+    setEditTemplateForm({
+      ...editTemplateForm,
+      questions: [...editTemplateForm.questions, { 
+        question_id: '',
+        number: '', 
+        prompt_md: '', 
+        marks: 1, 
+        hints: [] 
+      }]
+    });
+  };
+
+  const removeEditTemplateQuestion = (index) => {
+    const newQuestions = editTemplateForm.questions.filter((_, i) => i !== index);
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+  const addEditTemplateHint = (questionIndex) => {
+    const newQuestions = [...editTemplateForm.questions];
+    newQuestions[questionIndex].hints.push('');
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+  const removeEditTemplateHint = (questionIndex, hintIndex) => {
+    const newQuestions = [...editTemplateForm.questions];
+    newQuestions[questionIndex].hints = newQuestions[questionIndex].hints.filter((_, i) => i !== hintIndex);
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
+  const updateEditTemplateHint = (questionIndex, hintIndex, value) => {
+    const newQuestions = [...editTemplateForm.questions];
+    newQuestions[questionIndex].hints[hintIndex] = value;
+    setEditTemplateForm({ ...editTemplateForm, questions: newQuestions });
+  };
+
   const parseEmails = (text) => {
     return text
       .split('\n')
@@ -405,7 +388,6 @@ const addEditTemplateQuestion = () => {
       .filter(email => email.length > 0);
   };
 
-  // ✅ NEW: Count valid emails
   const countValidEmails = (text) => {
     const emails = parseEmails(text);
     return emails.filter(email => email.includes('@')).length;
@@ -442,7 +424,6 @@ const addEditTemplateQuestion = () => {
     }
   };
 
-  // ✅ NEW: Start editing assignment
   const startEditAssignment = (assignment) => {
     setEditingAssignment(assignment.assignment_id);
     setEditForm({
@@ -451,13 +432,11 @@ const addEditTemplateQuestion = () => {
     });
   };
 
-  // ✅ NEW: Cancel editing
   const cancelEdit = () => {
     setEditingAssignment(null);
     setEditForm({ assignment_id: '', student_emails_text: '' });
   };
 
-  // ✅ NEW: Update assignment with new students
   const updateAssignment = async () => {
     const validEmails = parseEmails(editForm.student_emails_text);
     if (validEmails.length === 0) {
@@ -480,6 +459,61 @@ const addEditTemplateQuestion = () => {
     }
   };
 
+  const deleteAssignment = async (assignmentId, assignmentTitle) => {
+    if (!window.confirm(`Are you sure you want to delete "${assignmentTitle}"?\n\nThis will delete:\n- The assignment\n- All student progress\n- All chat conversations\n\nThis cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await api.delete(`/assignments/${assignmentId}`);
+      showNotification(`Assignment deleted. ${response.data.student_assignments_deleted} student assignment(s) removed.`);
+      loadAssignments();
+      window.location.reload();
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || 'Failed to delete assignment';
+      showNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportAssignmentPDF = async (assignmentId, assignmentTitle) => {
+    try {
+      setLoading(true);
+      showNotification('Generating PDF... This may take a moment', 'info');
+      
+      const response = await api.post(
+        `/assignments/${assignmentId}/export-pdf`,
+        {},
+        {
+          responseType: 'blob'
+        }
+      );
+      
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const safeTitle = assignmentTitle.replace(/[^a-zA-Z0-9-_ ]/g, '_');
+      link.download = `${safeTitle}_submissions.pdf`;
+      
+      document.body.appendChild(link);
+      link.click();
+      
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      showNotification('PDF downloaded successfully!', 'success');
+    } catch (err) {
+      console.error('Export error:', err);
+      showNotification(err.response?.data?.detail || 'Failed to export PDF', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="admin-container">
       {notification.show && (
@@ -496,6 +530,12 @@ const addEditTemplateQuestion = () => {
             onClick={() => setActiveTab('admins')}
           >
             Manage Admins
+          </button>
+          <button
+            className={activeTab === 'graders' ? 'tab-active' : ''}
+            onClick={() => setActiveTab('graders')}
+          >
+            Manage Graders
           </button>
           <button
             className={activeTab === 'templates' ? 'tab-active' : ''}
@@ -541,15 +581,72 @@ const addEditTemplateQuestion = () => {
                       {admin.added_by && admin.added_by !== 'N/A' && ` by ${admin.added_by}`}
                     </span>
                   </div>
-                  {(
-                    <button
-                      onClick={() => removeAdmin(admin.email)}
-                      className="remove-button"
-                      disabled={loading}
-                    >
-                      Remove
-                    </button>
-                  )}
+                  <button
+                    onClick={() => removeAdmin(admin.email)}
+                    className="remove-button"
+                    disabled={loading}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'graders' && (
+          <div className="admin-section">
+            <h2>Manage Graders</h2>
+            <p style={{ color: '#666', marginBottom: '1rem' }}>
+              Graders can view all student chats and submissions but cannot modify assignments or admin settings.
+            </p>
+            
+            <div className="add-admin-form">
+              <input
+                type="email"
+                placeholder="Enter email address"
+                value={newGraderEmail}
+                onChange={(e) => setNewGraderEmail(e.target.value)}
+                className="admin-input"
+              />
+              <button onClick={addGrader} disabled={loading} className="admin-button">
+                {loading ? 'Adding...' : 'Add Grader'}
+              </button>
+            </div>
+
+            <div className="admins-list">
+              <h3>Current Graders ({graders.length})</h3>
+              {graders.map((grader, idx) => (
+                <div key={idx} className="admin-card">
+                  <div className="admin-info">
+                    <span className="admin-email">
+                      {grader.email}
+                      {grader.is_admin && (
+                        <span className="badge" style={{ 
+                          marginLeft: '0.5rem',
+                          background: '#3498db',
+                          color: 'white',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold'
+                        }}>
+                          Also Admin
+                        </span>
+                      )}
+                    </span>
+                    <span className="admin-meta">
+                      Added: {grader.added_at}
+                      {grader.added_by && grader.added_by !== 'N/A' && ` by ${grader.added_by}`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => removeGrader(grader.email)}
+                    className="remove-button"
+                    disabled={loading}
+                  >
+                    Remove
+                  </button>
                 </div>
               ))}
             </div>
@@ -660,7 +757,6 @@ const addEditTemplateQuestion = () => {
               {templates.map((template, idx) => (
                 <div key={idx} className="template-card">
                   {editingTemplate === template.template_id ? (
-                    // ✅ Edit mode
                     <div className="edit-template-form" style={{ width: '100%' }}>
                       <input
                         type="text"
@@ -767,7 +863,6 @@ const addEditTemplateQuestion = () => {
                       </div>
                     </div>
                   ) : (
-                    // ✅ View mode
                     <>
                       <div>
                         <h4>{template.title}</h4>
@@ -846,7 +941,6 @@ const addEditTemplateQuestion = () => {
                   className={`assignment-card-admin ${editingAssignment === assignment.assignment_id ? 'edit-mode' : 'view-mode'}`}
                 >
                   {editingAssignment === assignment.assignment_id ? (
-                    // ✅ Edit mode
                     <div className="edit-assignment-form">
                       <h4>{assignment.title}</h4>
                       <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
@@ -878,7 +972,6 @@ const addEditTemplateQuestion = () => {
                       </div>
                     </div>
                   ) : (
-                    // ✅ View mode
                     <>
                       <div className="assignment-card-content">
                         <h4>{assignment.title}</h4>

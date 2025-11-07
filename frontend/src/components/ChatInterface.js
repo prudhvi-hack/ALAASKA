@@ -114,9 +114,23 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                     ✓ Submitted (Attempt #{metadata.attempts})
                   </span>
                 )}
+                {/* ✅ NEW: Show if viewing as grader */}
+                {metadata.is_grader_view && (
+                  <span className="banner-grader-badge" style={{
+                    marginLeft: '0.5rem',
+                    padding: '0.25rem 0.5rem',
+                    background: '#ffc107',
+                    color: '#000',
+                    borderRadius: '4px',
+                    fontSize: '0.75rem',
+                    fontWeight: 'bold'
+                  }}>
+                    👁️ GRADER VIEW
+                  </span>
+                )}
               </div>
               <div className="banner-subtitle" style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                Click to view assignment →
+                Click to view assignment details →
               </div>
             </div>
           </div>

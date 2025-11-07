@@ -28,3 +28,10 @@ class AddAdminRequest(BaseModel):
 
 class RemoveAdminRequest(BaseModel):
     email: EmailStr
+
+# ✅ NEW: Grader models
+class AddGraderRequest(BaseModel):
+    email: EmailStr
+
+class RemoveGraderRequest(BaseModel):
+    email: EmailStr
