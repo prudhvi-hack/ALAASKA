@@ -64,66 +64,65 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ✅ FIXED: Single useEffect with proper error handling
-  useEffect(() => {
-    if (!isAuthenticated) return;
+  // ✅ FIXED: Single useEffect with proper error handling  
+  // ✅ SIMPLIFIED: Remove the admin/grader check - backend handles this automatically
+useEffect(() => {
+  if (!isAuthenticated) return;
 
-    const initialize = async () => {
-      try {
-        setIsLoading(true);
+  const initialize = async () => {
+    try {
+      setIsLoading(true);
 
-        // Load conversations
-        const convRes = await api.get('/conversations');
-        const fetchedConversations = convRes.data || [];
-        setConversations(fetchedConversations);
+      // Load conversations - backend automatically returns correct ones based on user role
+      const convRes = await api.get('/conversations');
+      const fetchedConversations = convRes.data || [];
+      setConversations(fetchedConversations);
 
-        // Check admin status - 403 is EXPECTED for non-admins
-        try {
-          const adminRes = await api.get('/admin/check');
-          setIsAdmin(adminRes.data.is_admin);
-        } catch (adminErr) {
-          // ✅ 403 is expected for non-admin users, not an error
-          if (adminErr.response?.status === 403) {
-            console.log('User is not an admin (expected)');
-            setIsAdmin(false);
-          } else if (adminErr.message === 'Session expired') {
-            console.log('Session expired, user will be redirected to login');
-            return;
-          } else {
-            console.error('Admin check failed:', adminErr);
-            setIsAdmin(false);
-          }
-        }
+      // Load initial chat
+      const params = new URLSearchParams(window.location.search);
+      const urlChatId = params.get('chat_id');
 
-        // Load initial chat
-        const params = new URLSearchParams(window.location.search);
-        const urlChatId = params.get('chat_id');
-
-        if (urlChatId) {
-          await loadConversation(urlChatId);
-        } else if (fetchedConversations.length > 0) {
-          await loadConversation(fetchedConversations[0].chat_id);
-        } else {
-          await startNewChat();
-        }
-
-      } catch (err) {
-        // ✅ Handle session expiry
-        if (err.message === 'Session expired') {
-          console.log('Session expired, user will be redirected to login');
-          return;
-        }
-        
-        // ✅ For other errors, log but don't crash - conversations are loaded
-        console.error('Initialization error:', err);
-      } finally {
-        setIsLoading(false);
+      if (urlChatId) {
+        await loadConversation(urlChatId);
+      } else if (fetchedConversations.length > 0) {
+        await loadConversation(fetchedConversations[0].chat_id);
+      } else {
+        await startNewChat();
       }
-    };
 
-    initialize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+    } catch (err) {
+      if (err.message === 'Session expired') {
+        console.log('Session expired, user will be redirected to login');
+        return;
+      }
+      
+      console.error('Initialization error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  initialize();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isAuthenticated]);
+
+useEffect(() => {
+  if (!isAuthenticated) return;
+
+  const checkAdminStatus = async () => {
+    try {
+      const adminRes = await api.get('/admin/check');
+      setIsAdmin(adminRes.data.is_admin);
+    } catch (err) {
+      // Not an admin, that's fine
+      if (err.response?.status === 403) {
+        setIsAdmin(false);
+      }
+    }
+  };
+
+  checkAdminStatus();
+}, [isAuthenticated, setIsAdmin]);
 
   const sendMessage = async () => {
     if (!userInput.trim() || isLoading) return;
