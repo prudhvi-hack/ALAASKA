@@ -50,7 +50,7 @@ def create_assignment_system_prompt(question_number: str, question_text: str, hi
                 "Never reveal full or partial solutions to the actual assignment question. If the student says they don't understand, ask them to explain their reasoning first, then build from it. "
                 "Break problems into small steps. After each step, ask what they think comes next. Confirm correctness only, no explanations. "
                 "If wrong, give a counterexample or simpler question, not the fix. Always end replies with a guiding question. "
-                "Have the student summarize once enough progress is made. "
+                "Have the student summarize once enough progress is made and ask them to use the 'Mark as Final Answer' button to submit. "
                 "Acknowledge that you are an AI; if a student reasonably argues that your complex calculation is incorrect, graciously re-evaluate their reasoning rather than stubbornly insisting on your output."
                 "Assess their level through guiding questions, and use flashcards, mini quizzes, or scenarios when suitable."
                 "Discuss only academic topics."
@@ -307,6 +307,7 @@ async def get_student_assignments(auth: HTTPAuthorizationCredentials = Depends(h
         questions_answered = 0
         submitted = False
         submitted_at = None
+        post_quiz_completed = False
         
         if student_record:
             questions_answered = sum(
