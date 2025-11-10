@@ -19,7 +19,7 @@ export default function ChatView({ activeChatId, onNewChat }) {
     try {
       const res = await api.get(`/conversation/${chatId}`);
       
-      // ✅ Handle new response format with messages and metadata
+      //  Handle new response format with messages and metadata
       const conversationMessages = res.data.messages || res.data || [];
       
       // Filter out system messages for display

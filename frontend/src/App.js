@@ -64,8 +64,8 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ✅ FIXED: Single useEffect with proper error handling  
-  // ✅ SIMPLIFIED: Remove the admin/grader check - backend handles this automatically
+  // : Single useEffect with proper error handling  
+  // IMPLIFIED: Remove the admin/grader check - backend handles this automatically
 useEffect(() => {
   if (!isAuthenticated) return;
 

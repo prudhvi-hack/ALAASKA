@@ -10,6 +10,9 @@ templates_collection = db["assignment_templates"]
 assignments_collection = db["assignments"]
 student_assignments_collection = db["student_assignments"]
 
+quiz_templates_collection = db["quiz_templates"]
+student_quiz_responses_collection = db["student_quiz_responses"]
+
 async def create_assignment_indexes():
     """Create indexes for assignment collections"""
     try:

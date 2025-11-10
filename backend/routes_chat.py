@@ -80,9 +80,9 @@ async def get_conversation(
     user = await get_current_user(auth)
     user_id = user["auth0_id"]
     user_email = user["email"].lower()
-    is_grader = user.get("is_grader", False)  # ✅ Changed from is_admin
+    is_grader = user.get("is_grader", False)  #  Changed from is_admin
 
-    # ✅ Graders can view any conversation
+    #  Graders can view any conversation
     if is_grader:
         conversation = await conversations_collection.find_one({
             "chat_id": chat_id,
@@ -108,7 +108,7 @@ async def get_conversation(
         "has_submitted": False,
         "submitted_message_index": None,
         "attempts": 0,
-        "is_grader_view": is_grader and conversation.get("user_id") != user_id  # ✅ Changed
+        "is_grader_view": is_grader and conversation.get("user_id") != user_id  #  Changed
     }
 
     # If assignment chat, fetch question details
@@ -119,7 +119,7 @@ async def get_conversation(
         metadata["assignment_id"] = assignment_id
         metadata["question_id"] = question_id
 
-        # ✅ For grader view, find the student who owns this conversation
+        #  For grader view, find the student who owns this conversation
         if is_grader and conversation.get("user_id") != user_id:
             from backend.db_mongo import users_collection
             conversation_owner = await users_collection.find_one({"auth0_id": conversation.get("user_id")})

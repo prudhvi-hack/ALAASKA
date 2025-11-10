@@ -38,7 +38,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                         "number": "1",
                         "marks": 10,
                         "student_solution": "Answer text or None",
-                        "chat_id": "uuid-string"  # ✅ NEW
+                        "chat_id": "uuid-string"  # 
                     },
                     ...
                 ]
@@ -70,7 +70,6 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
         alignment=TA_LEFT
     )
     
-    # ✅ NEW: Style for chat link
     link_style = ParagraphStyle(
         'LinkStyle',
         parent=styles['Normal'],
@@ -126,7 +125,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     [Paragraph(f"<b>Question {question['number']}</b> (Page {page_num + 1} of 2) - <b>{question['marks']} marks</b>", header_style)]
                 ]
                 
-                # ✅ NEW: Add chat link if available
+            
                 if question.get('chat_id'):
                     chat_link = f"{base_url}/?chat_id={question['chat_id']}"
                     header_data.append([Paragraph(f"<b>Chat Link:</b> {chat_link}", link_style)])

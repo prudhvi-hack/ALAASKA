@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css'; // ✅ Import KaTeX CSS
+import 'katex/dist/katex.min.css'; //  Import KaTeX CSS
 import api from '../api/axios';
 import '../styles/assignment_chat.css';
 
@@ -64,7 +64,7 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
         }
       );
 
-      alert(`✅ Answer submitted successfully!\nAttempt #${res.data.attempts}\nYou can view it in the Assignments page.`);
+      alert(` Answer submitted successfully!\nAttempt #${res.data.attempts}\nYou can view it in the Assignments page.`);
       loadChatMetadata();
     } catch (err) {
       console.error('Failed to submit answer:', err);
@@ -176,7 +176,7 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                             <span className="typing-dot"></span>
                           </div>
                         ) : (
-                          // ✅ FIXED: Add LaTeX support with remark-math and rehype-katex
+                          //  : Add LaTeX support with remark-math and rehype-katex
                           <ReactMarkdown
                             remarkPlugins={[remarkMath]}
                             rehypePlugins={[rehypeKatex]}

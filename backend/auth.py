@@ -219,12 +219,11 @@ async def get_current_user(auth: HTTPAuthorizationCredentials = Depends(http_bea
         name = user_info.get("name") or user_id
 
         # Step 3: Get or create user in database (single optimized query)
-        # ✅ FIXED: Get the full user document with is_admin and is_grader
+    
         user_doc = await get_or_create_user(user_id, email, name)
         
         logger.info(f"[AUTH] Returning user data for: {email}")
         
-        # ✅ FIXED: Return all necessary fields including is_admin and is_grader
         return {
             "auth0_id": user_id,
             "username": name,

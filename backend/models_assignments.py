@@ -25,6 +25,48 @@ class Question(BaseModel):
     feedback: Optional[str] = None  # Instructor feedback
     attempts: int = 0  # Number of times submitted
 
+
+class MCQOption(BaseModel):
+    option_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    text: str
+    is_correct: bool = False
+
+class MCQQuestion(BaseModel):
+    question_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    question_text: str
+    options: List[MCQOption] = Field(..., min_length=2)
+    explanation: Optional[str] = None  # Shown after answering
+
+
+class QuizTemplate(BaseModel):
+    quiz_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    description: Optional[str] = ""
+    questions: List[MCQQuestion]
+
+
+class CreateQuizTemplateRequest(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    questions: List[MCQQuestion]
+
+
+class UpdateQuizTemplateRequest(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    questions: List[MCQQuestion]
+
+class SubmitQuizAnswerRequest(BaseModel):
+    question_id: str
+    selected_option_id: str
+
+class SubmissionSnapshot(BaseModel):
+    submission_number: int
+    submitted_at: str
+    questions_answered: int
+    total_questions: int
+    answers: List[dict]  # Snapshot of answers at submission time
+
 class AssignmentUpsert(BaseModel):
     title: str
     due_date: Optional[str] = None
@@ -37,7 +79,6 @@ class CreateTemplateRequest(BaseModel):
     description: str
     questions: List[Question]
 
-# ✅ NEW: Update template request
 class UpdateTemplateRequest(BaseModel):
     title: str
     description: str
@@ -46,12 +87,18 @@ class UpdateTemplateRequest(BaseModel):
 class CreateAssignmentRequest(BaseModel):
     template_id: str
     allowed_students: List[str]
+    pre_quiz_id: Optional[str] = None
+    post_quiz_id: Optional[str] = None
 
 class MarkSolutionRequest(BaseModel):
     solution: str
     is_correct: bool
 
 class SubmitAnswerRequest(BaseModel):
-    chat_id: str  # Which chat the answer is from
-    message_index: int  # Which message in that chat
-    message_content: str  # Full text of the answer
+    chat_id: str
+    message_index: int
+    message_content: str
+
+
+class SubmitAssignmentRequest(BaseModel):
+    pass  # No body needed, just triggers submission

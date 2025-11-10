@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
     logout({ returnTo: window.location.origin });
   }, [logout]);
 
-  // ✅ Setup axios with auth functions when user is authenticated
+  // up axios with auth functions when user is authenticated
   useEffect(() => {
     if (isAuthenticated) {
       const auth0Instance = {
