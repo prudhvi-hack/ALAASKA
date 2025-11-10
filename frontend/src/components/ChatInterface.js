@@ -2,14 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css'; //  Import KaTeX CSS
+import 'katex/dist/katex.min.css';
 import api from '../api/axios';
+import LatexEditor from './LatexEditor';
 import '../styles/assignment_chat.css';
 
 export default function ChatInterface({ chatId, messages, input, setInput, sendMessage, onNavigateToAssignment }) {
   const [metadata, setMetadata] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [useLatexEditor, setUseLatexEditor] = useState(false);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
         }
       );
 
-      alert(` Answer submitted successfully!\nAttempt #${res.data.attempts}\nYou can view it in the Assignments page.`);
+      alert(`Answer submitted successfully!\nAttempt #${res.data.attempts}\nYou can view it in the Assignments page.`);
       loadChatMetadata();
     } catch (err) {
       console.error('Failed to submit answer:', err);
@@ -86,18 +88,18 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
       sendMessage();
     }
   };
+
   const preprocessLatex = (text) => {
-  if (!text) return text;
-  
-  // Replace escaped LaTeX brackets with proper delimiters
-  let processed = text
-    .replace(/\\\[/g, '$$')  // \[ becomes $$
-    .replace(/\\\]/g, '$$')  // \] becomes $$
-    .replace(/\\\(/g, '$')   // \( becomes $
-    .replace(/\\\)/g, '$');  // \) becomes $
-  
-  return processed;
-};
+    if (!text) return text;
+    
+    let processed = text
+      .replace(/\\\[/g, '$$')
+      .replace(/\\\]/g, '$$')
+      .replace(/\\\(/g, '$')
+      .replace(/\\\)/g, '$');
+    
+    return processed;
+  };
 
   useEffect(() => {
     const handleClickOutside = () => setActiveMenu(null);
@@ -176,7 +178,6 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                             <span className="typing-dot"></span>
                           </div>
                         ) : (
-                          //  : Add LaTeX support with remark-math and rehype-katex
                           <ReactMarkdown
                             remarkPlugins={[remarkMath]}
                             rehypePlugins={[rehypeKatex]}
@@ -225,21 +226,60 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
           )}
         </div>
 
-        <div className="input-container">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your message here... (Shift+Enter for new line)"
-            rows="3"
-          />
-          <button 
-            onClick={sendMessage} 
-            className="send-button"
-            disabled={!input.trim()}
-          >
-            ➤
-          </button>
+        {/* ✅ UPDATED: Input Area with Left-Side Toggle */}
+        <div className="input-area-wrapper">
+          {useLatexEditor ? (
+            <div className="latex-editor-container">
+              <LatexEditor
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onSubmit={sendMessage}
+                placeholder="Type your answer using Markdown and LaTeX..."
+              />
+              <div className="latex-submit-bar">
+                <button 
+                  onClick={() => setUseLatexEditor(false)}
+                  className="latex-toggle-button-left"
+                  title="Switch to Simple Editor"
+                >
+                  📝
+                </button>
+                <button 
+                  onClick={sendMessage}
+                  className="latex-send-button"
+                  disabled={!input.trim()}
+                >
+                  Send Message (Ctrl+Enter)
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="input-container-with-toggle">
+              <button
+                onClick={() => setUseLatexEditor(true)}
+                className="toggle-latex-button-left"
+                title="Switch to LaTeX Editor for Type Theory & Formal Verification"
+              >
+                🔬
+              </button>
+              <div className="input-container">
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Type your message here... (Shift+Enter for new line)"
+                  rows="3"
+                />
+                <button 
+                  onClick={sendMessage} 
+                  className="send-button"
+                  disabled={!input.trim()}
+                >
+                  ➤
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

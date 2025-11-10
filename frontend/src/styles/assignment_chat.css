@@ -188,3 +188,209 @@
     max-width: 90%;
   }
 }
+
+
+.input-area-wrapper {
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid #e0e0e0;
+}
+
+
+.editor-toggle-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* ...existing code... */
+
+/* ✅ NEW: Input Area with Left-Side Toggle */
+.input-area-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border-top: 2px solid #e0e0e0;
+}
+
+/* ✅ NEW: Simple editor with left toggle button */
+.input-container-with-toggle {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  padding: 0.5rem;
+  background: #f8f9fa;
+}
+
+.toggle-latex-button-left {
+  flex-shrink: 0;
+  width: 50px;
+  background: white;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-right: 0.5rem;
+  align-self: stretch;
+}
+
+.toggle-latex-button-left:hover {
+  background: #007bff;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Adjust input container to work with toggle button */
+.input-container-with-toggle .input-container {
+  flex: 1;
+  width: auto;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.input-container-with-toggle .input-container textarea {
+  flex: 1;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px 0 0 8px;
+  resize: none;
+  font-size: 1rem;
+  outline: none;
+  min-height: 80px;
+}
+
+.input-container-with-toggle .input-container textarea:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.input-container-with-toggle .send-button {
+  flex-shrink: 0;
+  width: 60px;
+  background: #20b2aa;
+  color: white;
+  border: none;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+  font-size: 1.5rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-container-with-toggle .send-button:hover:not(:disabled) {
+  background: #1a9b94;
+  transform: scale(1.05);
+}
+
+.input-container-with-toggle .send-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ✅ NEW: LaTeX Editor Container */
+.latex-editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 500px;
+  background: white;
+  overflow: hidden;
+}
+
+.latex-submit-bar {
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border-top: 2px solid #e0e0e0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* ✅ NEW: Toggle button inside LaTeX editor */
+.latex-toggle-button-left {
+  flex-shrink: 0;
+  width: 50px;
+  height: 50px;
+  background: white;
+  border: 2px solid #6c757d;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.latex-toggle-button-left:hover {
+  background: #6c757d;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+}
+
+.latex-send-button {
+  flex: 1;
+  padding: 0.75rem 2rem;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+.latex-send-button:hover:not(:disabled) {
+  background: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.latex-send-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Remove old editor-toggle-bar styles if they exist */
+.editor-toggle-bar {
+  display: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .input-container-with-toggle {
+    padding: 0.25rem;
+  }
+
+  .toggle-latex-button-left {
+    width: 44px;
+    font-size: 1.3rem;
+  }
+
+  .latex-editor-container {
+    height: 400px;
+  }
+
+  .latex-toggle-button-left {
+    width: 44px;
+    height: 44px;
+    font-size: 1.3rem;
+  }
+}
