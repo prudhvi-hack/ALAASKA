@@ -11,7 +11,8 @@ from backend.models_assignments import (
     Question,
     CreateQuizTemplateRequest,
     UpdateQuizTemplateRequest,
-    SubmitQuizAnswerRequest
+    SubmitQuizAnswerRequest,
+    UpdateSubmissionSettingsRequest
 )
 from backend.db_assignments import (
     templates_collection,
@@ -69,6 +70,29 @@ Take your time - there's no rush. Let's work through this together! 🎯"""
         }
     ]
 
+async def check_submission_enabled(assignment_id: str, student_email: str):
+    """Check if submissions are enabled for this student"""
+    assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+    
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    submissions_enabled = assignment.get("submissions_enabled", True)  # Default: enabled
+    submission_exceptions = [e.lower() for e in assignment.get("submission_exceptions", [])]
+    
+    # If globally enabled, allow everyone
+    if submissions_enabled:
+        return True
+    
+    # If globally disabled, check exceptions
+    if student_email.lower() in submission_exceptions:
+        return True
+    
+    # Not allowed
+    raise HTTPException(
+        status_code=403,
+        detail="Submissions are currently disabled for this assignment"
+    )
 # ========== ADMIN ROUTES ==========
 
 @router.post("/assignment-templates")
@@ -147,6 +171,8 @@ async def create_assignment(
         "allowed_students": [email.lower() for email in request.allowed_students],
         "pre_quiz_id": request.pre_quiz_id,  
         "post_quiz_id": request.post_quiz_id,
+        "submissions_enabled": True, 
+        "submission_exceptions": [], 
         "created_by": user["email"],
         "created_at": datetime.now(timezone.utc)
     }
@@ -173,6 +199,53 @@ async def get_all_assignments(user: dict = Depends(require_admin)):
             "created_at": assignment["created_at"].isoformat()
         })
     return {"assignments": assignments_list}
+
+@router.get("/assignments/{assignment_id}/submission-settings")
+async def get_submission_settings(
+    assignment_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Get submission settings for an assignment (admin only)"""
+    assignment = await assignments_collection.find_one(
+        {"assignment_id": assignment_id},
+        {"_id": 0, "submissions_enabled": 1, "submission_exceptions": 1}
+    )
+    
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    return {
+        "submissions_enabled": assignment.get("submissions_enabled", True),
+        "submission_exceptions": assignment.get("submission_exceptions", [])
+    }
+
+@router.put("/assignments/{assignment_id}/submission-settings")
+async def update_submission_settings(
+    assignment_id: str,
+    request: UpdateSubmissionSettingsRequest,
+    user: dict = Depends(require_admin)
+):
+    """Update submission settings for an assignment (admin only)"""
+    submission_exceptions = [email.lower().strip() for email in request.submission_exceptions]
+    
+    result = await assignments_collection.update_one(
+        {"assignment_id": assignment_id},
+        {
+            "$set": {
+                "submissions_enabled": request.submissions_enabled,
+                "submission_exceptions": submission_exceptions
+            }
+        }
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    
+    return {
+        "message": "Submission settings updated successfully",
+        "submissions_enabled": request.submissions_enabled,
+        "submission_exceptions": submission_exceptions
+    }
 
 @router.put("/assignments/{assignment_id}/students")
 async def update_assignment_students(
@@ -233,14 +306,15 @@ async def export_assignment_pdf(
             student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
             student_email = student_assignment["student_email"]
             
-            # Process questions 
+            # ✅ Process questions with submission time
             questions_data = []
             for question in student_assignment["questions"]:
                 questions_data.append({
                     "number": question.get("number", "?"),
                     "marks": question.get("marks", 0),
                     "student_solution": question.get("student_solution"),
-                    "chat_id": question.get("chat_id")  
+                    "chat_id": question.get("chat_id"),
+                    "submitted_at": question.get("submitted_at")  # ✅ Include submission time
                 })
             
             students_data.append({
@@ -259,7 +333,7 @@ async def export_assignment_pdf(
         pdf_buffer = create_gradescope_pdf(
             assignment_title=assignment["title"],
             students_data=students_data,
-            base_url=base_url  
+            base_url=base_url
         )
         
         # Create filename
@@ -281,8 +355,7 @@ async def export_assignment_pdf(
         print(f"Error generating PDF: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")# ========== STUDENT ROUTES ==========
-
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
 @router.get("/assignments")
 async def get_student_assignments(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
     """Get all assignments for the current student"""
@@ -308,6 +381,10 @@ async def get_student_assignments(auth: HTTPAuthorizationCredentials = Depends(h
         submitted = False
         submitted_at = None
         post_quiz_completed = False
+
+        submissions_enabled = assignment.get("submissions_enabled", True)
+        submission_exceptions = [e.lower() for e in assignment.get("submission_exceptions", [])]
+        can_submit = submissions_enabled or (user_email in submission_exceptions)
         
         if student_record:
             questions_answered = sum(
@@ -330,7 +407,8 @@ async def get_student_assignments(auth: HTTPAuthorizationCredentials = Depends(h
             "post_quiz_completed": post_quiz_completed,
             "questions_answered": questions_answered,
             "submitted": submitted,  
-            "submitted_at": submitted_at  
+            "submitted_at": submitted_at,
+            "submissions_enabled": can_submit
         })
     
     return {"assignments": student_assignments}
@@ -435,6 +513,8 @@ async def accept_assignment(assignment_id: str, auth: HTTPAuthorizationCredentia
         "message": "Assignment accepted successfully",
         "conversations_created": len(questions_with_chats)
     }
+
+
 @router.get("/assignments/{assignment_id}")
 async def get_assignment_details(assignment_id: str, auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
     """Get assignment details with student's progress"""
@@ -459,11 +539,16 @@ async def get_assignment_details(assignment_id: str, auth: HTTPAuthorizationCred
         {"_id": 0, "allowed_students": 0}
     )
     
-    #  Simplified - no snapshot comparison
+    # Simplified - no snapshot comparison
     questions_answered = sum(
         1 for q in student_assignment.get("questions", [])
         if q.get("student_solution") is not None
     )
+    
+    # ✅ ADD submission permission check
+    submissions_enabled = assignment.get("submissions_enabled", True)
+    submission_exceptions = [e.lower() for e in assignment.get("submission_exceptions", [])]
+    can_submit = submissions_enabled or (user_email in submission_exceptions)
     
     return {
         "assignment_id": assignment_id,
@@ -476,9 +561,11 @@ async def get_assignment_details(assignment_id: str, auth: HTTPAuthorizationCred
         "post_quiz_completed": student_assignment.get("post_quiz_completed", False),
         "questions_answered": questions_answered,
         "total_questions": len(student_assignment["questions"]),
-        "submitted": student_assignment.get("submitted", False),  #  Simple boolean
-        "submitted_at": student_assignment.get("submitted_at")  #  Single timestamp
+        "submitted": student_assignment.get("submitted", False),
+        "submitted_at": student_assignment.get("submitted_at"),
+        "submissions_enabled": can_submit
     }
+
 
 @router.get("/assignments/{assignment_id}/questions/{question_id}/chat")
 async def get_question_chat(
@@ -636,6 +723,8 @@ async def submit_answer(
     if not student_assignment:
         raise HTTPException(status_code=404, detail="Assignment not found or not accepted")
     
+    await check_submission_enabled(assignment_id, user_email)
+
     # Find the question
     question_index = -1
     target_question = None
@@ -656,7 +745,7 @@ async def submit_answer(
     if request.chat_id not in valid_chat_ids:
         raise HTTPException(status_code=400, detail="Chat does not belong to this question")
     
-    # Verify the message exists in the specified chat
+    # ✅ FIX: Get the LATEST conversation data
     chat = await conversations_collection.find_one({
         "chat_id": request.chat_id
     })
@@ -665,17 +754,33 @@ async def submit_answer(
         raise HTTPException(status_code=404, detail="Chat not found")
 
     messages = chat.get("messages", [])
+    
     selected_message = None
     actual_index = -1
     
+    # Try exact content match first
     for idx, msg in enumerate(messages):
         if msg.get("role") == "user" and msg.get("content") == request.message_content:
             selected_message = msg
             actual_index = idx
             break
     
+    # ✅ If exact match fails, try normalized match (strip whitespace)
     if selected_message is None:
-        raise HTTPException(status_code=400, detail="Message not found or not a user message")
+        normalized_content = request.message_content.strip()
+        for idx, msg in enumerate(messages):
+            if msg.get("role") == "user" and msg.get("content", "").strip() == normalized_content:
+                selected_message = msg
+                actual_index = idx
+                break
+    
+    # ✅ Still no match? Return more helpful error
+    if selected_message is None:
+        user_messages = [msg for msg in messages if msg.get("role") == "user"]
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Message not found in conversation. Found {len(user_messages)} user messages. Please refresh the page and try again."
+        )
     
     # Update the question with the submitted answer
     target_question["student_solution"] = request.message_content
@@ -723,6 +828,7 @@ async def submit_assignment(
     if not student_assignment:
         raise HTTPException(status_code=404, detail="Assignment not found or not accepted")
     
+    await check_submission_enabled(assignment_id, user_email)
     # Get assignment to check for post-quiz
     assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
     if not assignment:

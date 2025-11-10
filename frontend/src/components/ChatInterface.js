@@ -48,6 +48,11 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
 
   const handleMarkAsAnswer = async (messageContent) => {
     if (!metadata?.is_assignment_chat) return;
+    
+    if (metadata?.submissions_disabled) {
+      alert('Submissions are currently disabled for this assignment.');
+      return;
+    }
 
     if (!window.confirm('Mark this message as your final answer? This will replace any previous submission.')) {
       return;

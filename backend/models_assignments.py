@@ -102,3 +102,7 @@ class SubmitAnswerRequest(BaseModel):
 
 class SubmitAssignmentRequest(BaseModel):
     pass  # No body needed, just triggers submission
+
+class UpdateSubmissionSettingsRequest(BaseModel):
+    submissions_enabled: bool
+    submission_exceptions: List[str] = []  # Emails allowed when disabled

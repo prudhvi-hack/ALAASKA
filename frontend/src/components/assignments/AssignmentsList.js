@@ -56,8 +56,13 @@ export default function AssignmentsList({
       alert('This assignment has already been submitted.');
       return;
     }
+
+    if (!assignment.submissions_enabled) {
+      alert('Submissions are currently disabled for this assignment.');
+      return;
+    }
     
-    // TEP 1: Check if all questions answered (show warning FIRST)
+    // STEP 1: Check if all questions answered (show warning FIRST)
     if (questions_answered < total_questions) {
       const confirmed = window.confirm(
         `You have only answered ${questions_answered} out of ${total_questions} questions.\n\nAre you sure you want to submit?`
@@ -145,8 +150,9 @@ export default function AssignmentsList({
                   {!assignment.submitted && (
                     <button
                       onClick={() => handleSubmitFromList(assignment)}
-                      disabled={submitting === assignment.assignment_id}
+                      disabled={submitting === assignment.assignment_id || !assignment.submissions_enabled }
                       className="submit-button-small first-submit"
+                      title={!assignment.submissions_enabled ? 'Submissions are currently disabled' : ''}
                     >
                       {submitting === assignment.assignment_id ? 'Submitting...' : 'Submit'}
                     </button>

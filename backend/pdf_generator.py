@@ -8,6 +8,7 @@ from reportlab.platypus import Table, TableStyle
 from io import BytesIO
 import markdown2
 import re
+from datetime import datetime
 
 def strip_markdown(text):
     """Convert markdown to plain text"""
@@ -38,7 +39,8 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                         "number": "1",
                         "marks": 10,
                         "student_solution": "Answer text or None",
-                        "chat_id": "uuid-string"  # 
+                        "chat_id": "uuid-string",
+                        "submitted_at": "2024-01-15T10:30:00" or None
                     },
                     ...
                 ]
@@ -115,6 +117,16 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
     for student_idx, student in enumerate(students_data):
         # Iterate through each question
         for q_idx, question in enumerate(student["questions"]):
+            # ✅ Format submission time
+            submitted_at_str = "Not submitted"
+            if question.get('submitted_at'):
+                try:
+                    # Parse ISO format datetime
+                    dt = datetime.fromisoformat(question['submitted_at'].replace('Z', '+00:00'))
+                    submitted_at_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                except:
+                    submitted_at_str = str(question['submitted_at'])
+            
             # Create 2 pages per question
             for page_num in range(2):
                 # Student info header (on every page)
@@ -122,10 +134,10 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     [Paragraph(f"<b>Name:</b> {student['name']}", header_style)],
                     [Paragraph(f"<b>Email:</b> {student['email']}", header_style)],
                     [Paragraph(f"<b>Assignment:</b> {assignment_title}", header_style)],
-                    [Paragraph(f"<b>Question {question['number']}</b> (Page {page_num + 1} of 2) - <b>{question['marks']} marks</b>", header_style)]
+                    [Paragraph(f"<b>Question {question['number']}</b> (Page {page_num + 1} of 2) - <b>{question['marks']} marks</b>", header_style)],
+                    [Paragraph(f"<b>Submitted:</b> {submitted_at_str}", header_style)]  # ✅ Added submission time
                 ]
                 
-            
                 if question.get('chat_id'):
                     chat_link = f"{base_url}/?chat_id={question['chat_id']}"
                     header_data.append([Paragraph(f"<b>Chat Link:</b> {chat_link}", link_style)])

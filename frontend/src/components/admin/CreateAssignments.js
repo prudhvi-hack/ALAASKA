@@ -5,6 +5,11 @@ export default function CreateAssignments({ templates, quizTemplates, assignment
   const [busy, setBusy] = useState(false);
   const [expandedDescriptions, setExpandedDescriptions] = useState({});
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [showSubmissionModal, setShowSubmissionModal] = useState(null);
+  const [submissionSettings, setSubmissionSettings] = useState({
+    submissions_enabled: true,
+    submission_exceptions: ''
+  });
 
   const [assignmentForm, setAssignmentForm] = useState({
     template_id: '',
@@ -155,6 +160,41 @@ export default function CreateAssignments({ templates, quizTemplates, assignment
     }
   };
 
+  const openSubmissionSettings = async (assignmentId) => {
+  try {
+    const res = await api.get(`/assignments/${assignmentId}/submission-settings`);
+    setSubmissionSettings({
+      submissions_enabled: res.data.submissions_enabled,
+      submission_exceptions: res.data.submission_exceptions.join('\n')
+    });
+    setShowSubmissionModal(assignmentId);
+  } catch (err) {
+    showNotification('Failed to load submission settings', 'error');
+  }
+};
+
+const saveSubmissionSettings = async () => {
+  const emails = submissionSettings.submission_exceptions
+    .split('\n')
+    .map(e => e.trim())
+    .filter(e => e.length > 0);
+
+  try {
+    setBusy(true);
+    await api.put(`/assignments/${showSubmissionModal}/submission-settings`, {
+      submissions_enabled: submissionSettings.submissions_enabled,
+      submission_exceptions: emails
+    });
+    showNotification('Submission settings updated successfully');
+    setShowSubmissionModal(null);
+    onUpdate();
+  } catch (err) {
+    showNotification(err.response?.data?.detail || 'Failed to update settings', 'error');
+  } finally {
+    setBusy(false);
+  }
+};
+
   return (
     <div className="admin-section">
       <h2>Create Assignment</h2>
@@ -304,6 +344,13 @@ export default function CreateAssignments({ templates, quizTemplates, assignment
                   >
                     Edit Students
                   </button>
+                  <button
+                    onClick={() => openSubmissionSettings(assignment.assignment_id)}
+                    className="edit-button"
+                    style={{ marginLeft: '0.5rem' }}
+                  >
+                    ⚙️ Submission Settings
+                  </button>
                   
                   <button
                     onClick={() => exportAssignmentPDF(assignment.assignment_id, assignment.title)}
@@ -324,8 +371,80 @@ export default function CreateAssignments({ templates, quizTemplates, assignment
               </>
             )}
           </div>
+          
         ))}
       </div>
+      {showSubmissionModal && (
+        <div className="modal-overlay" onClick={() => setShowSubmissionModal(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <h3>Submission Settings</h3>
+            
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={submissionSettings.submissions_enabled}
+                  onChange={(e) => setSubmissionSettings({
+                    ...submissionSettings,
+                    submissions_enabled: e.target.checked
+                  })}
+                />
+                <span style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
+                  Enable submissions globally
+                </span>
+              </label>
+              <p style={{ color: '#666', fontSize: '0.9rem', marginTop: '0.5rem', marginLeft: '1.7rem' }}>
+                When disabled, only students in the exceptions list can submit
+              </p>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                Allow specific students when submissions are disabled:
+              </label>
+              <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                Enter emails (one per line) for students who can submit even when disabled
+              </p>
+              <textarea
+                value={submissionSettings.submission_exceptions}
+                onChange={(e) => setSubmissionSettings({
+                  ...submissionSettings,
+                  submission_exceptions: e.target.value
+                })}
+                placeholder="student1@example.com&#10;student2@example.com"
+                rows="6"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  fontFamily: 'monospace',
+                  fontSize: '0.9rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+              <button
+                onClick={saveSubmissionSettings}
+                disabled={busy}
+                className="admin-button"
+                style={{ flex: 1 }}
+              >
+                {busy ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                onClick={() => setShowSubmissionModal(null)}
+                className="cancel-button"
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    
   );
 }

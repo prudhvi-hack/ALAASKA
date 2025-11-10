@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import api from '../../api/axios';
 import QuizModal from './QuizModal';
 
@@ -32,7 +35,7 @@ export default function AssignmentDetail({
         alert('New chat started! Your previous conversation is saved.');
       }
       
-      window.location.href = `/?chat_id=${res.data.chat_id}`;
+      window.location.href = `/?chat_id=${res.data.chat_id}&submissions_enabled=${assignment.submissions_enabled}`;
     } catch (err) {
       console.error('Failed to open question chat:', err);
       alert(err.response?.data?.detail || 'Failed to open question chat');
@@ -42,7 +45,6 @@ export default function AssignmentDetail({
   const handlePostQuizComplete = () => {
     setShowQuiz(null);
     if (onRefresh) onRefresh();
-    // Try to submit again after completing post-quiz
     handleSubmitAssignment();
   };
 
@@ -50,13 +52,11 @@ export default function AssignmentDetail({
     const questionsAnswered = assignment.questions_answered || 0;
     const totalQuestions = assignment.total_questions || 0;
     
-    // Check if already submitted
     if (assignment.submitted) {
       alert('This assignment has already been submitted.');
       return;
     }
     
-    //  STEP 1: Check if all questions answered (show warning FIRST)
     if (questionsAnswered < totalQuestions) {
       const confirmed = window.confirm(
         `You have only answered ${questionsAnswered} out of ${totalQuestions} questions.\n\nAre you sure you want to submit?`
@@ -64,13 +64,11 @@ export default function AssignmentDetail({
       if (!confirmed) return;
     }
     
-    //  STEP 2: Check post-quiz requirement (show modal if not completed)
     if (assignment.has_post_quiz && !assignment.post_quiz_completed) {
       setShowQuiz({ assignmentId: assignment.assignment_id, type: 'post' });
-      return; // Stop here, will continue after quiz completion
+      return;
     }
     
-    //  STEP 3: Submit assignment
     try {
       setSubmitting(true);
       const res = await api.post(`/assignments/${assignment.assignment_id}/submit`);
@@ -87,7 +85,42 @@ export default function AssignmentDetail({
     }
   };
 
-  // Auto-scroll to question
+  // ✅ NEW: Preprocess LaTeX for rendering
+  const preprocessLatex = (text) => {
+    if (!text) return text;
+    
+    return text
+      .replace(/\\\[/g, '$$')
+      .replace(/\\\]/g, '$$')
+      .replace(/\\\(/g, '$')
+      .replace(/\\\)/g, '$');
+  };
+
+  // ✅ NEW: Reusable Markdown component with LaTeX support
+  const MarkdownContent = ({ children }) => (
+    <ReactMarkdown 
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
+      components={{
+        code({node, inline, className, children, ...props}) {
+          return inline ? (
+            <code className="inline-code" {...props}>
+              {children}
+            </code>
+          ) : (
+            <pre className="code-block">
+              <code className={className} {...props}>
+                {children}
+              </code>
+            </pre>
+          );
+        }
+      }}
+    >
+      {preprocessLatex(children)}
+    </ReactMarkdown>
+  );
+
   React.useEffect(() => {
     if (assignment && autoScrollToQuestionId) {
       setTimeout(() => {
@@ -119,12 +152,11 @@ export default function AssignmentDetail({
               <p className="assignment-description">{assignment.description}</p>
             </div>
             
-            {/* Submit Button */}
             {!isSubmitted && (
               <div className="header-actions">
                 <button
                   onClick={handleSubmitAssignment}
-                  disabled={submitting}
+                  disabled={submitting || !assignment.submissions_enabled }
                   className="submit-assignment-button first-submit"
                 >
                   {submitting ? 'Submitting...' : 'Submit Assignment'}
@@ -133,7 +165,6 @@ export default function AssignmentDetail({
             )}
           </div>
 
-          {/* Submission Status Banner */}
           {isSubmitted && (
             <div className="submission-info-banner">
               <span className="info-icon">✓</span>
@@ -146,7 +177,6 @@ export default function AssignmentDetail({
             </div>
           )}
 
-          {/* Progress Indicator */}
           <div className="progress-indicator">
             <span className="progress-text">
               Progress: {questionsAnswered}/{totalQuestions} questions answered
@@ -159,15 +189,21 @@ export default function AssignmentDetail({
             </div>
           </div>
           
-          {/*  REMOVED: Post-Quiz Banner - no longer showing */}
-          
-          {/*  : Only show completion badge if post-quiz completed */}
           {assignment.has_post_quiz && assignment.post_quiz_completed && !isSubmitted && (
             <div className="completion-badge">
               ✓ Post-Quiz Completed - Ready to Submit
             </div>
           )}
         </div>
+        {!assignment.submissions_enabled && (
+        <div className="submission-info-banner" style={{ background: '#fff3cd', borderColor: '#ffc107' }}>
+          <span className="info-icon">⚠️</span>
+          <div>
+            <strong>Submissions Disabled</strong>
+            <p>The instructor has disabled submissions for this assignment.</p>
+          </div>
+        </div>
+      )}
 
         <div className="assignment-questions-section">
           <h3>Questions</h3>
@@ -191,27 +227,11 @@ export default function AssignmentDetail({
                     )}
                   </div>
                   
+                  {/* ✅ FIXED: Use MarkdownContent with LaTeX support */}
                   <div className="question-text">
-                    <ReactMarkdown 
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        code({node, inline, className, children, ...props}) {
-                          return inline ? (
-                            <code className="inline-code" {...props}>
-                              {children}
-                            </code>
-                          ) : (
-                            <pre className="code-block">
-                              <code className={className} {...props}>
-                                {children}
-                              </code>
-                            </pre>
-                          );
-                        }
-                      }}
-                    >
+                    <MarkdownContent>
                       {q.prompt_md || q.question_text || 'No question text available'}
-                    </ReactMarkdown>
+                    </MarkdownContent>
                   </div>
                   
                   {q.hints && q.hints.length > 0 && q.hints.some(hint => hint && hint.trim()) && (
@@ -241,27 +261,11 @@ export default function AssignmentDetail({
                         )}
                       </div>
                       
+                      {/* ✅ FIXED: Use MarkdownContent with LaTeX support */}
                       <div className="solution-content">
-                        <ReactMarkdown 
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            code({node, inline, className, children, ...props}) {
-                              return inline ? (
-                                <code className="inline-code" {...props}>
-                                  {children}
-                                </code>
-                              ) : (
-                                <pre className="code-block">
-                                  <code className={className} {...props}>
-                                    {children}
-                                  </code>
-                                </pre>
-                              );
-                            }
-                          }}
-                        >
+                        <MarkdownContent>
                           {q.student_solution}
-                        </ReactMarkdown>
+                        </MarkdownContent>
                       </div>
                       
                       <div className="solution-status-row">
@@ -316,12 +320,11 @@ export default function AssignmentDetail({
           )}
         </div>
 
-        {/* Bottom Submit Button */}
         {!isSubmitted && (
           <div className="assignment-footer">
             <button
               onClick={handleSubmitAssignment}
-              disabled={submitting}
+              disabled={submitting || !assignment.submissions_enabled}
               className="submit-assignment-button large first-submit"
             >
               {submitting ? 'Submitting...' : 'Submit Assignment'}
