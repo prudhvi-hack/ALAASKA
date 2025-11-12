@@ -3,10 +3,11 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './style.css';
 import { Auth0Provider } from '@auth0/auth0-react';
+import { AuthProvider } from './contexts/AuthContext';
 
 const domain = process.env.REACT_APP_AUTH0_DOMAIN;
 const clientId = process.env.REACT_APP_AUTH0_CLIENT_ID;
-const audience = process.env.REACT_APP_AUTH0_API_AUDIENCE; 
+const audience = process.env.REACT_APP_AUTH0_API_AUDIENCE;
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -15,12 +16,14 @@ root.render(
     clientId={clientId}
     authorizationParams={{
       redirect_uri: window.location.origin,
-      audience: audience, // Add this - crucial for getting proper JWT tokens
-      scope: "openid profile email", 
-      useRefreshTokens:true,
-      cacheLocation:"memory"
+      audience: audience,
+      scope: "openid profile email offline_access", //  Added offline_access
     }}
+    useRefreshTokens={true}
+    cacheLocation="localstorage"
   >
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </Auth0Provider>
 );

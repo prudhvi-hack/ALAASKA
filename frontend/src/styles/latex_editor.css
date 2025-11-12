@@ -1,0 +1,329 @@
+.latex-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Toolbar */
+.latex-toolbar {
+  background: #f8f9fa;
+  border-bottom: 2px solid #e0e0e0;
+  padding: 0.75rem 1rem;
+}
+
+.toolbar-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.toolbar-label {
+  font-weight: 600;
+  color: #555;
+  margin-right: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.toolbar-button {
+  padding: 0.4rem 0.75rem;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: 'Times New Roman', serif;
+  font-size: 1.1rem;
+  transition: all 0.2s;
+  min-width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #333;
+  font-weight: 500;
+}
+
+.toolbar-button:hover {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+}
+
+.toolbar-button:active {
+  transform: translateY(0);
+}
+
+.toolbar-hint {
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* Split pane layout */
+.split-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-pane,
+.preview-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.editor-pane {
+  border-right: 2px solid #e0e0e0;
+}
+
+.pane-header {
+  background: #f8f9fa;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.pane-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Input area */
+.latex-input {
+  flex: 1;
+  padding: 1rem;
+  border: none;
+  resize: none;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  outline: none;
+  background: #fafafa;
+}
+
+.latex-input:focus {
+  background: #fff;
+}
+
+/* Preview area */
+.latex-preview {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  background: white;
+  line-height: 1.8;
+}
+
+.latex-preview h1, 
+.latex-preview h2, 
+.latex-preview h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: #333;
+}
+
+.latex-preview p {
+  margin-bottom: 1rem;
+}
+
+.latex-preview code {
+  background: #f4f4f4;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Monaco', monospace;
+  font-size: 0.9em;
+}
+
+.latex-preview pre {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  border-left: 4px solid #007bff;
+}
+
+.latex-preview pre code {
+  background: none;
+  padding: 0;
+}
+
+.preview-placeholder {
+  color: #999;
+  font-style: italic;
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+/* KaTeX rendering */
+.latex-preview .katex {
+  font-size: 1.1em;
+}
+
+.latex-preview .katex-display {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Help section */
+.latex-help {
+  border-top: 2px solid #e0e0e0;
+  background: #f8f9fa;
+  /* ✅ ADD: Flex-shrink to prevent overflow */
+  flex-shrink: 0;
+}
+
+.help-summary {
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  color: #555;
+  transition: background 0.2s;
+}
+
+.help-summary:hover {
+  background: #e9ecef;
+}
+
+.help-content {
+  padding: 1rem;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  /* ✅ ADD: Make help content scrollable */
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ✅ ADD: Custom scrollbar styling */
+.help-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.help-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.help-content::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.help-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.help-section h4 {
+  margin: 0 0 0.5rem 0;
+  color: #007bff;
+  font-size: 0.95rem;
+}
+
+.help-section ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.help-section li {
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.help-section code {
+  background: #f4f4f4;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Monaco', monospace;
+  font-size: 0.85em;
+  color: #c7254e;
+}
+
+.help-section pre {
+  background: #f8f9fa;
+  padding: 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  border-left: 3px solid #007bff;
+  white-space: pre;
+}
+
+/* Style for rendered LaTeX examples in help section */
+.help-example-render {
+  margin-top: 0.5rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* ✅ ADD: Prevent overflow in examples */
+  overflow-x: auto;
+}
+
+.help-example-render .katex-display {
+  margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .split-pane {
+    flex-direction: column;
+  }
+
+  .editor-pane {
+    border-right: none;
+    border-bottom: 2px solid #e0e0e0;
+    max-height: 50%;
+  }
+
+  .toolbar-section {
+    justify-content: flex-start;
+  }
+  
+  /* ✅ ADD: Reduce help height on tablets */
+  .help-content {
+    max-height: 250px;
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar-button {
+    min-width: 28px;
+    height: 28px;
+    padding: 0.3rem 0.6rem;
+    font-size: 1rem;
+  }
+
+  .latex-input {
+    font-size: 0.9rem;
+  }
+
+  .help-content {
+    grid-template-columns: 1fr;
+    /* ✅ ADD: Further reduce help height on mobile */
+    max-height: 200px;
+  }
+}

@@ -647,26 +647,6 @@ button:hover {
   font-weight: normal;
 }
 
-.conversation-button {
-  background: none;
-  border: none;
-  color: dimgray;
-  text-align: left;
-  padding: 0.5rem 0;
-  margin-bottom: 0.75rem;
-  cursor: pointer;
-  font-size: 1rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: all 0.2s ease;
-}
-
-.conversation-button:hover {
-  color: mintcream;
-  text-decoration: none;
-  transform: translateX(2px);
-}
 
 /* Delete button */
 .delete-button {
@@ -784,6 +764,44 @@ button:hover {
   .user-name-text {
     display: inline;
   }
+}
+/* Replace the conversation button hover styles (around line 568-595) with this: */
+
+.conversation-button {
+  background: none;
+  border: none;
+  color: dimgray;
+  text-align: left;
+  padding: 0.5rem 0;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.2s ease;
+  border-left: 4px solid transparent;  /* Add transparent border for smooth transition */
+  padding-left: 0.5rem;  /* Add padding to accommodate border */
+}
+
+.conversation-button:hover {
+  color: #333;  /* ← Changed from mintcream to dark gray */
+  background-color: #f5f5f5;  /* Light gray background */
+  text-decoration: none;
+  transform: translateX(2px);
+}
+
+.conversation-button.active-conversation {
+  background-color: #e0f2f1;  /* Light teal background */
+  border-left: 4px solid lightseagreen;  /* Left border indicator */
+  font-weight: 600;  /* Bold text */
+  color: #00695c;  /* Darker teal text */
+  padding-left: 0.5rem;
+}
+
+.conversation-button.active-conversation:hover {
+  background-color: #b2dfdb;  /* Slightly darker teal on hover */
+  color: #004d40;  /* Even darker teal text on hover */
 }
 
 

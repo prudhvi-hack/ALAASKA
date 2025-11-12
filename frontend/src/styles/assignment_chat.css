@@ -1,0 +1,396 @@
+/* ===== ASSIGNMENT CHAT BANNER ===== */
+.assignment-chat-banner {
+  background: linear-gradient(135deg, #20b2aa 0%, #1a9b94 100%);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.95rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.banner-icon {
+  font-size: 1.2rem;
+}
+
+.banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.banner-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.banner-subtitle {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.banner-submitted-badge {
+  margin-left: 0.75rem;
+  background: rgba(255, 255, 255, 0.25);
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ===== MESSAGE ACTIONS (3-DOT MENU) ===== */
+.message-wrapper {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.message-content-wrapper {
+  flex: 1;
+}
+
+.message-actions {
+  position: relative;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
+}
+
+.message-menu-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  opacity: 0.3;
+  transition: opacity 0.2s;
+  font-size: 1.2rem;
+  color: #666;
+  line-height: 1;
+  border-radius: 4px;
+}
+
+.message-menu-button:hover {
+  opacity: 1;
+  background: rgba(32, 178, 170, 0.1);
+}
+
+.message-menu-button.active {
+  opacity: 1;
+  background: rgba(32, 178, 170, 0.15);
+}
+
+.message-menu-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.2;
+}
+
+.message-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 200px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.2s;
+}
+
+.dropdown-item:hover:not(:disabled) {
+  background: rgba(32, 178, 170, 0.08);
+  color: #20b2aa;
+}
+
+.dropdown-item:disabled {
+  cursor: not-allowed;
+  color: #999;
+  background: none;
+}
+
+.dropdown-icon {
+  font-size: 1rem;
+}
+
+/* ===== USER MESSAGE STYLING (TEAL/GREEN THEME) ===== */
+.user-message {
+  background: #e0f2f1 !important;
+  border: 1px solid #80cbc4;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  max-width: 80%;
+  margin-left: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.assistant-message {
+  background: white;
+  border: 1px solid #e0e0e0;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  max-width: 80%;
+  margin-right: auto;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .assignment-chat-banner {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .banner-icon {
+    font-size: 1rem;
+  }
+
+  .banner-title {
+    font-size: 0.9rem;
+  }
+
+  .banner-subtitle {
+    font-size: 0.75rem;
+  }
+
+  .banner-submitted-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .message-dropdown {
+    min-width: 180px;
+  }
+
+  .user-message,
+  .assistant-message {
+    max-width: 90%;
+  }
+}
+
+
+.input-area-wrapper {
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid #e0e0e0;
+}
+
+
+.editor-toggle-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* ...existing code... */
+
+/* ✅ NEW: Input Area with Left-Side Toggle */
+.input-area-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border-top: 2px solid #e0e0e0;
+}
+
+/* ✅ NEW: Simple editor with left toggle button */
+.input-container-with-toggle {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  padding: 0.5rem;
+  background: #f8f9fa;
+}
+
+.toggle-latex-button-left {
+  flex-shrink: 0;
+  width: 50px;
+  background: white;
+  border: 2px solid #007bff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  margin-right: 0.5rem;
+  align-self: stretch;
+}
+
+.toggle-latex-button-left:hover {
+  background: #007bff;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Adjust input container to work with toggle button */
+.input-container-with-toggle .input-container {
+  flex: 1;
+  width: auto;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.input-container-with-toggle .input-container textarea {
+  flex: 1;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px 0 0 8px;
+  resize: none;
+  font-size: 1rem;
+  outline: none;
+  min-height: 80px;
+}
+
+.input-container-with-toggle .input-container textarea:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.input-container-with-toggle .send-button {
+  flex-shrink: 0;
+  width: 60px;
+  background: #20b2aa;
+  color: white;
+  border: none;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+  font-size: 1.5rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-container-with-toggle .send-button:hover:not(:disabled) {
+  background: #1a9b94;
+  transform: scale(1.05);
+}
+
+.input-container-with-toggle .send-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ✅ NEW: LaTeX Editor Container */
+.latex-editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 500px;
+  background: white;
+  overflow: hidden;
+}
+
+.latex-submit-bar {
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border-top: 2px solid #e0e0e0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+/* ✅ NEW: Toggle button inside LaTeX editor */
+.latex-toggle-button-left {
+  flex-shrink: 0;
+  width: 50px;
+  height: 50px;
+  background: white;
+  border: 2px solid #6c757d;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.latex-toggle-button-left:hover {
+  background: #6c757d;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+}
+
+.latex-send-button {
+  flex: 1;
+  padding: 0.75rem 2rem;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+.latex-send-button:hover:not(:disabled) {
+  background: #0056b3;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.latex-send-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Remove old editor-toggle-bar styles if they exist */
+.editor-toggle-bar {
+  display: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .input-container-with-toggle {
+    padding: 0.25rem;
+  }
+
+  .toggle-latex-button-left {
+    width: 44px;
+    font-size: 1.3rem;
+  }
+
+  .latex-editor-container {
+    height: 400px;
+  }
+
+  .latex-toggle-button-left {
+    width: 44px;
+    height: 44px;
+    font-size: 1.3rem;
+  }
+}
