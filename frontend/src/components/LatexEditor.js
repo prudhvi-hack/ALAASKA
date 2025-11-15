@@ -1,25 +1,91 @@
 import React, { useState, useRef, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import '../styles/latex_editor.css';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeMathjax from 'rehype-mathjax';
 
 export default function LatexEditor({ value, onChange, onSubmit, placeholder }) {
   const textareaRef = useRef(null);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [history, setHistory] = useState([value || '']);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const isUndoRedoRef = useRef(false);
+  const typingTimerRef = useRef(null);
+  const lastSavedValueRef = useRef(value || '');
 
-  // Smart text replacements
-  const smartReplacements = {
-    '->': '\\rightarrow',
-    '=>': '\\Rightarrow',
-    '>=': '\\ge',
-    '<=': '\\le',
-    '!=': '\\ne',
-    '/\\': '\\wedge',
-    '\\/': '\\vee',
-    '~': '\\neg',
-    '|-': '\\vdash',
+  useEffect(() => {
+    return () => {
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+      }
+    };
+  }, []);
+
+
+  useEffect(() => {
+    if (textareaRef.current && value) {
+      const length = value.length;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(length, length);
+    }
+  }, []);
+
+  const saveToHistory = (newValue) => {
+    if (newValue !== lastSavedValueRef.current) {
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push(newValue);
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+      lastSavedValueRef.current = newValue;
+    }
+  };
+  const handleInputChange = (e) => {
+    const newValue = e.target.value;
+    
+    // Don't save to history during undo/redo
+    if (!isUndoRedoRef.current) {
+      // Clear existing timer
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+      }
+      
+      // Check if user pressed space
+      const lastChar = newValue[newValue.length - 1];
+      if (lastChar === ' ' || lastChar === '\n') {
+        saveToHistory(newValue);
+      } else {
+        // Save after 500ms of no typing
+        typingTimerRef.current = setTimeout(() => {
+          saveToHistory(newValue);
+        }, 500);
+      }
+    }
+    isUndoRedoRef.current = false;
+    
+    onChange(e);
+  };
+
+  // ✅ ADD: Undo function
+const handleUndo = () => {
+   if (historyIndex > 0) {
+    isUndoRedoRef.current = true;
+    const newIndex = historyIndex - 1;
+    setHistoryIndex(newIndex);
+    onChange({ target: { value: history[newIndex] } });
+    lastSavedValueRef.current = history[newIndex];
+  }
+};
+
+// ✅ ADD: Redo function
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      isUndoRedoRef.current = true;
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      onChange({ target: { value: history[newIndex] } });
+      lastSavedValueRef.current = history[newIndex];
+    }
   };
 
   // Toolbar buttons with LaTeX symbols
@@ -39,97 +105,152 @@ export default function LatexEditor({ value, onChange, onSubmit, placeholder }) 
     { label: '{ }', insert: '\\{ \\}', title: 'Braces (Hoare triples)', needsMath: true },
     { label: ':=', insert: ':=', title: 'Assignment', needsMath: false },
     { label: 'wp', insert: '\\text{wp}', title: 'Weakest precondition', needsMath: true },
-    // ✅ NEW: Subscript and Superscript buttons
+    { label: '*', insert: '\\ast', title: 'Asterisk (multiplication/star)', needsMath: true },
     { label: 'x₁', insert: '_{1}', title: 'Subscript (e.g., x₁)', needsMath: true, moveCursorBack: 1 },
-    { label: 'x²', insert: '^{2}', title: 'Superscript (e.g., x²)', needsMath: true, moveCursorBack: 1 },
-    { 
-      label: 'Inference', 
-      insert: '$$\\frac{\\text{premises}}{\\text{conclusion}}$$', 
-      title: 'Inference rule template',
-      isBlock: true,
-      needsMath: false
-    },
+    { label: 'x²', insert: '^{2}', title: 'Superscript (e.g., x²)', needsMath: true, moveCursorBack: 1 }
   ];
 
-  // ✅ FIXED: Handle smart replacements as user types
-  const handleInputChange = (e) => {
-    const newValue = e.target.value;
-    const textarea = textareaRef.current;
-    const cursorPos = textarea.selectionStart;
-    
-    // Check for smart replacements
-    let replaced = false;
-    for (const [pattern, replacement] of Object.entries(smartReplacements)) {
-      if (newValue.endsWith(pattern)) {
-        // ✅ FIX: Remove the pattern and add replacement
-        const beforePattern = newValue.slice(0, -pattern.length);
-        const afterCursor = newValue.slice(cursorPos); // Get text after cursor
-        const replacedValue = beforePattern + replacement + afterCursor;
-        
-        onChange({ target: { value: replacedValue } });
-        replaced = true;
-        
-        // ✅ FIX: Set cursor position correctly after replacement
-        const newCursorPos = beforePattern.length + replacement.length;
-        setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = newCursorPos;
-        }, 0);
-        break;
-      }
-    }
-    
-    if (!replaced) {
-      onChange(e);
-    }
-  };
+ const inferenceTemplates = [
+  // Type 1: Simple inference rule
+  { 
+    label: 'Simple Rule', 
+    insert: '$$\\dfrac{\\text{premise}}{\\Gamma \\vdash \\text{conclusion}} \\quad (\\text{RULE-NAME})$$', 
+    title: 'Simple inference rule with premise ⊢ conclusion',
+    isBlock: true,
+    needsMath: false
+  },
+  
+  // Type 2: Inference with 2 premises (side by side)
+  { 
+    label: '2 Premises', 
+    insert: '$$\\dfrac{\\Gamma \\vdash \\text{premise}_1 \\quad \\Gamma \\vdash \\text{premise}_2}{\\Gamma \\vdash \\text{conclusion}} \\quad (\\text{RULE})$$', 
+    title: 'Inference with 2 premises side by side',
+    isBlock: true,
+    needsMath: false
+  },
+  
+  // Type 3: Double nested (2 levels)
+  { 
+    label: 'Double Nested', 
+    insert: '$$\\dfrac{\\dfrac{\\Gamma \\vdash \\text{premise}_1}{\\Gamma \\vdash \\text{premise}_2} \\quad (\\text{SUB-RULE}) \\quad \\Gamma \\vdash \\text{premise}_3}{\\Gamma \\vdash \\text{conclusion}} \\quad (\\text{MAIN-RULE})$$', 
+    title: 'Double nested inference (2 levels deep) with rule labels',
+    isBlock: true,
+    needsMath: false
+  },
+  
+  // Type 4: Triple nested (3 levels)
+  { 
+    label: 'Triple Nested', 
+    insert: '$$\\dfrac{\\dfrac{\\dfrac{\\Gamma \\vdash \\text{premise}_1}{\\Gamma \\vdash \\text{premise}_2} \\quad (\\text{L2-RULE}) \\quad \\Gamma \\vdash \\text{premise}_3}{\\Gamma \\vdash \\text{premise}_4} \\quad (\\text{L1-RULE}) \\quad \\Gamma \\vdash \\text{premise}_5}{\\Gamma \\vdash \\text{conclusion}} \\quad (\\text{MAIN-RULE})$$', 
+    title: 'Triple nested inference (3 levels deep) with rule labels at each level',
+    isBlock: true,
+    needsMath: false
+  },
+  
+  // Type 5: Quad nested (4 levels)
+  { 
+    label: '4-Level Nested', 
+    insert: '$$\\dfrac{\\dfrac{\\dfrac{\\dfrac{\\Gamma \\vdash \\text{premise}_1}{\\Gamma \\vdash \\text{premise}_2} \\quad (\\text{L3-RULE})}{\\Gamma \\vdash \\text{premise}_3} \\quad (\\text{L2-RULE})}{\\Gamma \\vdash \\text{premise}_4} \\quad (\\text{L1-RULE})}{\\Gamma \\vdash \\text{conclusion}} \\quad (\\text{MAIN-RULE})$$', 
+    title: 'Four levels of nested inference with rule labels at each level',
+    isBlock: true,
+    needsMath: false
+  },
+  
+  // Type 6: Five nested (5 levels)
+  { 
+    label: '5-Level Nested', 
+    insert: '$$\\dfrac{\\dfrac{\\dfrac{\\dfrac{\\dfrac{\\Gamma \\vdash \\text{premise}_1}{\\Gamma \\vdash \\text{premise}_2} \\quad (\\text{L4-RULE})}{\\Gamma \\vdash \\text{premise}_3} \\quad (\\text{L3-RULE})}{\\Gamma \\vdash \\text{premise}_4} \\quad (\\text{L2-RULE})}{\\Gamma \\vdash \\text{premise}_5} \\quad (\\text{L1-RULE})}{\\Gamma \\vdash \\text{conclusion}} \\quad (\\text{MAIN-RULE})$$', 
+    title: 'Five levels of nested inference with rule labels at each level',
+    isBlock: true,
+    needsMath: false
+  },
+];
 
-  // ✅ UPDATED: Insert text at cursor position with optional math mode wrapping and cursor positioning
-  const insertAtCursor = (text, isBlock = false, needsMath = false, moveCursorBack = 0) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const currentValue = value || '';
-    
-    let newValue;
-    let newCursorPos;
-    
-    // Wrap in math mode if needed
-    let textToInsert = text;
-    if (needsMath && !isBlock) {
-      // Check if we're already inside math mode
-      const beforeCursor = currentValue.substring(0, start);
-      
-      // Simple check: count $ symbols before cursor
-      const dollarsBeforeCursor = (beforeCursor.match(/\$/g) || []).length;
-      const isInMathMode = dollarsBeforeCursor % 2 === 1;
-      
-      if (!isInMathMode) {
-        textToInsert = `$${text}$ `;
-      }
-    }
-    
-    if (isBlock) {
-      // For block elements, add newlines
+
+const insertAtCursor = (text, isBlock = false, needsMath = false, moveCursorBack = 0) => {
+  const textarea = textareaRef.current;
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const currentValue = value || '';
+  
+  let newValue;
+  let newCursorPos;
+  
+  // ✅ UPDATED: Auto-detect math mode for ALL insertions (including blocks)
+  const beforeCursor = currentValue.substring(0, start);
+  const afterCursor = currentValue.substring(start);
+  
+  // Count $$ pairs before cursor
+  const doubleDollarsBeforeCursor = (beforeCursor.match(/\$\$/g) || []).length;
+  
+  // Count single $ (but not $$) before cursor
+  const beforeWithoutDouble = beforeCursor.replace(/\$\$/g, '');
+  const singleDollarsBeforeCursor = (beforeWithoutDouble.match(/\$/g) || []).length;
+  
+  // Check if we're inside $$...$$ block (display math)
+  const inDisplayMath = doubleDollarsBeforeCursor % 2 === 1;
+  
+  // Check if we're inside $...$ block (inline math)
+  const inInlineMath = !inDisplayMath && (singleDollarsBeforeCursor % 2 === 1);
+  
+  const inAnyMathMode = inDisplayMath || inInlineMath;
+  
+  let textToInsert = text;
+  
+  // ✅ NEW: Handle block templates
+  if (isBlock) {
+    // Strip $$ from block templates if we're already in math mode
+    if (inAnyMathMode && text.startsWith('$$') && text.endsWith('$$')) {
+      // Remove outer $$...$$ wrapper
+      textToInsert = text.slice(2, -2);
+      // Insert inline without newlines
+      newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
+      newCursorPos = start + textToInsert.length;
+    } else {
+      // Normal block insertion with newlines
       newValue = currentValue.substring(0, start) + '\n' + textToInsert + '\n' + currentValue.substring(end);
       newCursorPos = start + textToInsert.length + 1;
-    } else {
-      newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
-      newCursorPos = start + textToInsert.length - moveCursorBack;
     }
-    
-    onChange({ target: { value: newValue } });
-    
-    // Restore cursor position
-    setTimeout(() => {
-      textarea.focus();
-      textarea.selectionStart = textarea.selectionEnd = newCursorPos;
-    }, 0);
-  };
+  } else {
+    // ✅ Handle inline symbols
+    if (needsMath && !inAnyMathMode) {
+      textToInsert = `$${text}$ `;
+    }
+    newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
+    newCursorPos = start + textToInsert.length - moveCursorBack;
+  }
+  
+  onChange({ target: { value: newValue } });
+  
+  // Save to history after template insertion
+  saveToHistory(newValue);
+  
+  // Restore cursor position
+  setTimeout(() => {
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = newCursorPos;
+  }, 0);
+};
 
   // Handle keyboard shortcuts
   const handleKeyDown = (e) => {
+  // ✅ ADD: Ctrl+Z for undo
+    if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+    
+    // ✅ ADD: Ctrl+Shift+Z or Ctrl+Y for redo
+    if ((e.ctrlKey && e.shiftKey && e.key === 'Z') || (e.ctrlKey && e.key === 'y')) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+    
     if (e.key === 'Enter' && e.ctrlKey) {
       e.preventDefault();
       onSubmit?.();
@@ -168,9 +289,21 @@ export default function LatexEditor({ value, onChange, onSubmit, placeholder }) 
             </button>
           ))}
         </div>
-        <div className="toolbar-hint">
-          Tip: Type -&gt; for →, =&gt; for ⇒, &gt;= for ≥, &lt;= for ≤ | Use x₁ and x² for subscript/superscript | Auto-wrapped in math mode ($...$)
+        <div className="toolbar-section inference-section">
+          <span className="toolbar-label">Inference Rules:</span>
+          {inferenceTemplates.map((btn, idx) => (
+            <button
+              key={`inf-${idx}`}
+              onClick={() => insertAtCursor(btn.insert, btn.isBlock, btn.needsMath, btn.moveCursorBack)}
+              className="toolbar-button inference-button"
+              title={btn.title}
+              type="button"
+            >
+              {btn.label}
+            </button>
+          ))}
         </div>
+        
       </div>
 
       {/* Split pane editor */}
@@ -198,8 +331,23 @@ export default function LatexEditor({ value, onChange, onSubmit, placeholder }) 
           <div className="latex-preview">
             {value ? (
               <ReactMarkdown
-                remarkPlugins={[remarkMath]}
-                rehypePlugins={[rehypeKatex]}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeMathjax]}
+                components={{
+                  code({node, inline, className, children, ...props}) {
+                    return inline ? (
+                      <code className="inline-code" {...props}>
+                        {children}
+                      </code>
+                    ) : (
+                      <pre className="code-block">
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
+                      </pre>
+                    );
+                  }
+                }}
               >
                 {preprocessLatex(value)}
               </ReactMarkdown>
