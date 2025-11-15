@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import rehypeMathjax from 'rehype-mathjax';
 import api from '../api/axios';
 import LatexEditor from './LatexEditor';
 import '../styles/assignment_chat.css';
@@ -97,13 +97,11 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
   const preprocessLatex = (text) => {
     if (!text) return text;
     
-    let processed = text
+    return text
       .replace(/\\\[/g, '$$')
       .replace(/\\\]/g, '$$')
       .replace(/\\\(/g, '$')
       .replace(/\\\)/g, '$');
-    
-    return processed;
   };
 
   useEffect(() => {
@@ -184,8 +182,23 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                           </div>
                         ) : (
                           <ReactMarkdown
-                            remarkPlugins={[remarkMath]}
-                            rehypePlugins={[rehypeKatex]}
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[rehypeMathjax]}
+                            components={{
+                              code({node, inline, className, children, ...props}) {
+                                return inline ? (
+                                  <code className="inline-code" {...props}>
+                                    {children}
+                                  </code>
+                                ) : (
+                                  <pre className="code-block">
+                                    <code className={className} {...props}>
+                                      {children}
+                                    </code>
+                                  </pre>
+                                );
+                              }
+                            }}
                           >
                             {preprocessLatex(msg.content)}
                           </ReactMarkdown>
