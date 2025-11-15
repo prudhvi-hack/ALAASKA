@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { MathJaxContext } from "better-react-mathjax";
 import logo from './assets/alaaska_logo.png';
 import AssignmentsPage from './components/AssignmentsPage';
 import AdminPage from './components/AdminPage';
@@ -27,6 +28,26 @@ function App() {
   const [autoScrollToQuestionId, setAutoScrollToQuestionId] = useState(null);
   
   const messagesEndRef = useRef(null);
+
+  const mathJaxConfig = {
+    loader: { load: ["input/tex", "output/chtml"] },
+    tex: {
+      packages: { "[+]": ["mathtools"] },
+      inlineMath: [["$", "$"], ["\\(", "\\)"]],
+      displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+      processEscapes: true,
+      processEnvironments: true,
+      macros: {
+      // ✅ ADD: Define inferrule macro
+        inferrule: ["\\frac{\\displaystyle #1}{\\displaystyle #2}", 2],
+        "inferrule*": [
+          "\\frac{\\displaystyle #2}{\\displaystyle #3}\\;{\\small\\text{#1}}", 
+          3, 
+          ""
+        ]
+      }
+    },
+  };
 
   const handleNavigateToAssignment = (assignmentId, questionId) => {
     setAutoOpenAssignmentId(assignmentId);
@@ -269,6 +290,7 @@ useEffect(() => {
   const isMobile = windowWidth <= 768;
 
   return (
+    <MathJaxContext config={mathJaxConfig}>
     <>
       {notification.show && (
         <div className={`notification notification-${notification.type}`}>
@@ -567,6 +589,7 @@ useEffect(() => {
         </div>
       </div>
     </>
+    </MathJaxContext>
   );
 }
 
