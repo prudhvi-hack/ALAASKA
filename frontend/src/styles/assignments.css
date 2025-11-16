@@ -315,6 +315,26 @@
   line-height: 1.7;
   margin-bottom: 1rem;
   font-size: 0.95rem;
+  text-align: left; /* ✅ ADD: Force left alignment */
+  overflow-x: auto; /* ✅ ADD: Horizontal scroll */
+  overflow-y: visible;
+}
+
+.question-text .MathJax,
+.question-text .MJX-TEX {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  display: block;
+}
+
+.question-text .MathJax[display="true"] {
+  margin: 0.5rem 0;
+}
+
+.question-text svg {
+  max-width: 100%;
+  height: auto;
 }
 
 .question-text h1,
@@ -338,10 +358,12 @@
   margin-left: 1.5rem;
   margin-bottom: 0.75rem;
   padding-left: 0.5rem;
+  text-align: left;
 }
 
 .question-text li {
   margin-bottom: 0.4rem;
+  text-align: left;
 }
 
 .question-text blockquote {
@@ -490,13 +512,38 @@
 /* Update only the Student Submission Box section - replace lines 409-533 */
 
 /* ===== STUDENT SUBMISSION BOX ===== */
+/* ===== STUDENT SUBMISSION BOX ===== */
 .student-solution-box {
   background: #f8fdf9;
   border: 1px solid #a5d6a7;
   border-radius: 8px;
-  padding: 1.5rem;
+  padding: 0; /* ✅ CHANGED: Remove padding */
   margin-top: 1.5rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: visible; /* ✅ ADD: Allow overflow */
+  position: relative; /* ✅ ADD: For pseudo-element */
+}
+
+/* ✅ ADD: Background extension using ::before */
+.student-solution-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #f8fdf9;
+  border-radius: 8px;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ✅ ADD: Inner wrapper for padding and background */
+.student-solution-box > * {
+  position: relative;
+  z-index: 1;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 .solution-header {
@@ -504,6 +551,7 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+  padding-top: 1.5rem; /* ✅ ADD: Top padding */
   padding-bottom: 0.75rem;
   border-bottom: 1px solid #e0e0e0;
 }
@@ -534,10 +582,13 @@
   line-height: 1.7;
   color: #2c3e50;
   border: 1px solid #e0e0e0;
+  overflow-x: auto; /* ✅ ADD: Horizontal scroll */
+  overflow-y: visible; /* ✅ ADD: Allow vertical overflow */
 }
 
 .solution-content p {
   margin: 0.75rem 0;
+  text-align: left; /* ✅ ADD: Force left alignment */
 }
 
 .solution-content p:first-child {
@@ -552,10 +603,39 @@
 .solution-content ol {
   margin: 0.75rem 0;
   padding-left: 1.5rem;
+  text-align: left; /* ✅ ADD: Force left alignment */
 }
 
 .solution-content li {
   margin: 0.4rem 0;
+  text-align: left; /* ✅ ADD: Force left alignment */
+}
+
+/* ✅ ADD: Handle MathJax overflow specifically */
+.solution-content .MathJax,
+.solution-content .MJX-TEX {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  display: block;
+}
+
+.solution-content .MathJax[display="true"] {
+  margin: 0.5rem 0;
+}
+
+/* ✅ ADD: Ensure MathJax SVG stays within reasonable bounds */
+.solution-content svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ✅ ADD: Create scrollable container for very wide math */
+.solution-content .katex-display,
+.solution-content .MathJax_Display {
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 0.5rem 0;
 }
 
 .solution-content code.inline-code {
@@ -594,6 +674,7 @@
   align-items: center;
   flex-wrap: wrap;
   margin-bottom: 0.5rem;
+  padding-bottom: 1rem; /* ✅ ADD: Bottom padding for last element */
 }
 
 .solution-status {
@@ -641,6 +722,7 @@
   border-radius: 6px;
   padding: 1rem;
   margin-top: 1rem;
+  margin-bottom: 1.5rem; /* ✅ ADD: Bottom margin */
 }
 
 .instructor-feedback strong {
