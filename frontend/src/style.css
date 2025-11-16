@@ -479,11 +479,6 @@ body {
   font-size: 15px;
 }
 
-.user-message {
-  align-self: flex-end;
-  background-color: #e6e6e6;
-  text-align: right;
-}
 
 .assistant-message {
   align-self: flex-start;
