@@ -232,6 +232,19 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                                 <span className="dropdown-icon">📌</span>
                                 {submitting ? 'Submitting...' : 'Mark as Final Answer'}
                               </button>
+                              
+                              {/* ✅ ADD: Copy to Editor button */}
+                              <button
+                                onClick={() => {
+                                  setInput(msg.content);
+                                  setUseLatexEditor(true);
+                                  setActiveMenu(null);
+                                }}
+                                className="dropdown-item"
+                              >
+                                <span className="dropdown-icon">📋</span>
+                                Copy to Editor
+                              </button>
                             </div>
                           )}
                         </div>
