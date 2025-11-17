@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -11,8 +12,10 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
   const [metadata, setMetadata] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [useLatexEditor, setUseLatexEditor] = useState(false);
   const messagesEndRef = useRef(null);
+  const menuButtonRefs = useRef({});
 
   useEffect(() => {
     if (chatId) {
@@ -104,6 +107,23 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
       .replace(/\\\)/g, '$');
   };
 
+  // ✅ NEW: Handle menu toggle with position calculation
+  const handleMenuToggle = (idx, e) => {
+    e.stopPropagation();
+    
+    if (activeMenu === idx) {
+      setActiveMenu(null);
+      return;
+    }
+
+    const buttonRect = e.currentTarget.getBoundingClientRect();
+    setDropdownPosition({
+      top: buttonRect.bottom + window.scrollY + 4,
+      left: buttonRect.right + window.scrollX - 200 // 200px is dropdown width
+    });
+    setActiveMenu(idx);
+  };
+
   useEffect(() => {
     const handleClickOutside = () => setActiveMenu(null);
     if (activeMenu !== null) {
@@ -111,6 +131,54 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [activeMenu]);
+
+  // ✅ NEW: Dropdown Portal Component
+  const DropdownPortal = ({ messageIdx, messageContent }) => {
+    if (activeMenu !== messageIdx) return null;
+
+    return ReactDOM.createPortal(
+      <>
+        <div 
+          className="dropdown-overlay"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveMenu(null);
+          }}
+        />
+        <div
+          className="message-dropdown"
+          style={{
+            position: 'fixed',
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleMarkAsAnswer(messageContent)}
+            disabled={submitting}
+            className="dropdown-item"
+          >
+            <span className="dropdown-icon">📌</span>
+            {submitting ? 'Submitting...' : 'Mark as Final Answer'}
+          </button>
+          
+          <button
+            onClick={() => {
+              setInput(messageContent);
+              setUseLatexEditor(true);
+              setActiveMenu(null);
+            }}
+            className="dropdown-item"
+          >
+            <span className="dropdown-icon">📋</span>
+            Copy to Editor
+          </button>
+        </div>
+      </>,
+      document.body
+    );
+  };
 
   return (
     <div className="main">
@@ -208,45 +276,17 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                       {msg.role === 'user' && metadata?.is_assignment_chat && !msg.isStreaming && (
                         <div className="message-actions">
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveMenu(activeMenu === idx ? null : idx);
-                            }}
+                            ref={el => menuButtonRefs.current[idx] = el}
+                            onClick={(e) => handleMenuToggle(idx, e)}
                             disabled={submitting}
                             className={`message-menu-button ${activeMenu === idx ? 'active' : ''}`}
                             title="Options"
                           >
                             ⋮
                           </button>
-
-                          {activeMenu === idx && (
-                            <div
-                              className="message-dropdown"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <button
-                                onClick={() => handleMarkAsAnswer(msg.content)}
-                                disabled={submitting}
-                                className="dropdown-item"
-                              >
-                                <span className="dropdown-icon">📌</span>
-                                {submitting ? 'Submitting...' : 'Mark as Final Answer'}
-                              </button>
-                              
-                              {/* ✅ ADD: Copy to Editor button */}
-                              <button
-                                onClick={() => {
-                                  setInput(msg.content);
-                                  setUseLatexEditor(true);
-                                  setActiveMenu(null);
-                                }}
-                                className="dropdown-item"
-                              >
-                                <span className="dropdown-icon">📋</span>
-                                Copy to Editor
-                              </button>
-                            </div>
-                          )}
+                          
+                          {/* ✅ CHANGED: Render dropdown via portal */}
+                          <DropdownPortal messageIdx={idx} messageContent={msg.content} />
                         </div>
                       )}
                     </div>
@@ -257,7 +297,6 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
           )}
         </div>
 
-        {/* ✅ UPDATED: Input Area with Left-Side Toggle */}
         <div className="input-area-wrapper">
           {useLatexEditor ? (
             <div className="latex-editor-container">
