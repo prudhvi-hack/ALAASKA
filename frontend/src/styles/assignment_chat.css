@@ -41,7 +41,7 @@
   white-space: nowrap;
 }
 
-/* ===== MESSAGE ACTIONS (3-DOT MENU) ===== */
+/* ===== MESSAGE WRAPPER ===== */
 .message-wrapper {
   position: relative;
   display: flex;
@@ -49,22 +49,24 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  background: transparent; /* ✅ CHANGED: Let ::before handle background */
+  background: transparent;
   min-height: 100%;
   text-align: left;
-  z-index: 1; /* ✅ ADD: Above ::before pseudo-element */
+  z-index: 1;
 }
 
+/* ===== MESSAGE CONTENT ===== */
 .message-content-wrapper {
   flex: 1;
   min-width: 0;
   word-wrap: break-word;
   overflow-wrap: break-word;
   text-align: left;
-  overflow-x: auto; /* ✅ ADD: Horizontal scroll for very wide content */
+  overflow-x: auto;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
+
 .message-content-wrapper p {
   margin: 0 0 0.5rem 0;
   text-align: left;
@@ -74,7 +76,7 @@
   margin-bottom: 0;
 }
 
-/* ✅ ADD: Handle MathJax overflow specifically */
+/* Handle MathJax overflow */
 .message-content-wrapper .MathJax,
 .message-content-wrapper .MJX-TEX {
   max-width: 100%;
@@ -83,17 +85,17 @@
   display: block;
 }
 
-/* ✅ ADD: Ensure inline math doesn't break layout */
 .message-content-wrapper .MathJax[display="true"] {
   margin: 0.5rem 0;
 }
 
+/* ===== MESSAGE ACTIONS (3-DOT MENU) ===== */
 .message-actions {
   position: relative;
   margin-left: 0.5rem;
   flex-shrink: 0;
   align-self: flex-start;
-  z-index: 2; /* ✅ ADD: Above background and content */
+  z-index: 100000 !important;
 }
 
 .message-menu-button {
@@ -108,7 +110,7 @@
   line-height: 1;
   border-radius: 4px;
   position: relative;
-  z-index: 2;
+  z-index: 100001 !important;
 }
 
 .message-menu-button:hover {
@@ -116,12 +118,14 @@
   background: rgba(255, 255, 255, 0.6);
   border-color: rgba(32, 178, 170, 0.3);
   transform: scale(1.1);
+  z-index: 100002 !important;
 }
 
 .message-menu-button.active {
   opacity: 1;
   background: rgba(255, 255, 255, 0.8);
   border-color: rgba(32, 178, 170, 0.5);
+  z-index: 100002 !important;
 }
 
 .message-menu-button:disabled {
@@ -149,72 +153,53 @@
   border-color: rgba(32, 178, 170, 0.3);
 }
 
+/* ===== DROPDOWN MENU ===== */
+/* ===== DROPDOWN MENU (PORTAL - RENDERED AT BODY LEVEL) ===== */
 .message-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
+  position: fixed; /* ✅ CHANGED: from absolute to fixed */
   background: white;
   border: 1px solid #e0e0e0;
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
+  z-index: 999999 !important;
   min-width: 200px;
-  margin-top: 4px;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.dropdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999998 !important;
+  background: transparent;
+  cursor: default;
 }
 
 .dropdown-item {
-  width: 100%;
-  text-align: left;
-  padding: 0.75rem 1rem;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: #333;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: white;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #333;
   transition: background 0.2s;
 }
 
 .dropdown-item:hover:not(:disabled) {
-  background: rgba(32, 178, 170, 0.08);
-  color: #20b2aa;
-}
-
-.dropdown-item:disabled {
-  cursor: not-allowed;
-  color: #999;
-  background: none;
-}
-
-.dropdown-icon {
-  font-size: 1rem;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: white;
-  border: none;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: #333;
-  transition: background 0.2s;
-}
-
-.dropdown-item:hover {
   background: #f0f0f0;
 }
 
 .dropdown-item:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  background: #fafafa;
 }
 
 .dropdown-item:not(:last-child) {
@@ -225,6 +210,11 @@
   font-size: 1.1rem;
   min-width: 20px;
   text-align: center;
+}
+
+/* Ensure dropdown parent has high z-index when active */
+.message-actions:has(.message-dropdown) {
+  z-index: 999998 !important;
 }
 
 /* ===== USER MESSAGE STYLING (TEAL/GREEN THEME) ===== */
@@ -239,7 +229,9 @@
   margin-left: 40px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   text-align: left;
+  z-index: 1 !important;
 }
+
 .user-message::before {
   content: '';
   position: absolute;
@@ -249,11 +241,11 @@
   bottom: 0;
   background: #e0f2f1;
   border-radius: 8px;
-  z-index: -1; /* ✅ Behind content */
-  pointer-events: none; /* ✅ Don't block interactions */
+  z-index: -1 !important;
+  pointer-events: none;
 }
 
-
+/* ===== ASSISTANT MESSAGE STYLING ===== */
 .assistant-message {
   background: white;
   border: 1px solid #e0e0e0;
@@ -262,12 +254,12 @@
   margin-bottom: 1rem;
   max-width: 100%;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow: visible; /* ✅ CHANGED: Allow content to overflow */
+  overflow: visible;
   text-align: left;
-  position: relative; /* ✅ ADD: For pseudo-element positioning */
+  position: relative;
+  z-index: 1 !important;
 }
 
-/* ✅ ADD: Background extension for assistant messages */
 .assistant-message::before {
   content: '';
   position: absolute;
@@ -277,60 +269,11 @@
   bottom: 0;
   background: white;
   border-radius: 8px;
-  z-index: -1; /* ✅ Behind content */
-  pointer-events: none; /* ✅ Don't block interactions */
+  z-index: -1 !important;
+  pointer-events: none;
 }
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 768px) {
-  .assignment-chat-banner {
-    padding: 0.6rem 1rem;
-    font-size: 0.85rem;
-  }
-
-  .banner-icon {
-    font-size: 1rem;
-  }
-
-  .banner-title {
-    font-size: 0.9rem;
-  }
-
-  .banner-subtitle {
-    font-size: 0.75rem;
-  }
-
-  .banner-submitted-badge {
-    font-size: 0.7rem;
-    padding: 0.15rem 0.5rem;
-  }
-
-  .message-dropdown {
-    min-width: 180px;
-  }
-
-}
-
-
-.input-area-wrapper {
-  display: flex;
-  flex-direction: column;
-  border-top: 2px solid #e0e0e0;
-}
-
-
-.editor-toggle-bar {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 1rem;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-/* ...existing code... */
-
-/* ✅ NEW: Input Area with Left-Side Toggle */
+/* ===== INPUT AREA ===== */
 .input-area-wrapper {
   display: flex;
   flex-direction: column;
@@ -340,7 +283,6 @@
   border-top: 2px solid #e0e0e0;
 }
 
-/* ✅ NEW: Simple editor with left toggle button */
 .input-container-with-toggle {
   display: flex;
   align-items: stretch;
@@ -372,7 +314,6 @@
   box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
 }
 
-/* Adjust input container to work with toggle button */
 .input-container-with-toggle .input-container {
   flex: 1;
   width: auto;
@@ -424,7 +365,7 @@
   transform: none;
 }
 
-/* ✅ NEW: LaTeX Editor Container */
+/* ===== LATEX EDITOR ===== */
 .latex-editor-container {
   display: flex;
   flex-direction: column;
@@ -442,7 +383,6 @@
   align-items: center;
 }
 
-/* ✅ NEW: Toggle button inside LaTeX editor */
 .latex-toggle-button-left {
   flex-shrink: 0;
   width: 50px;
@@ -490,13 +430,52 @@
   transform: none;
 }
 
-/* Remove old editor-toggle-bar styles if they exist */
-.editor-toggle-bar {
-  display: none;
+/* ===== DROPDOWN OVERLAY ===== */
+.dropdown-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999997 !important;
+  background: transparent;
+  pointer-events: auto;
 }
 
-/* Responsive */
+/* Ensure nothing can cover the dropdown */
+.message-dropdown,
+.message-dropdown * {
+  pointer-events: auto !important;
+}
+
+/* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
+  .assignment-chat-banner {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .banner-icon {
+    font-size: 1rem;
+  }
+
+  .banner-title {
+    font-size: 0.9rem;
+  }
+
+  .banner-subtitle {
+    font-size: 0.75rem;
+  }
+
+  .banner-submitted-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+  }
+
+  .message-dropdown {
+    min-width: 180px;
+  }
+
   .input-container-with-toggle {
     padding: 0.25rem;
   }
