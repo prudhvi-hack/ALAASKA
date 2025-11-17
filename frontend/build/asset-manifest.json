@@ -1,14 +1,14 @@
 {
   "files": {
-    "main.css": "/static/css/main.ae748594.css",
-    "main.js": "/static/js/main.00b31e1a.js",
+    "main.css": "/static/css/main.bae5cd02.css",
+    "main.js": "/static/js/main.7178f382.js",
     "static/media/alaaska_logo.png": "/static/media/alaaska_logo.fae9566f267d5d1adb73.png",
     "index.html": "/index.html",
-    "main.ae748594.css.map": "/static/css/main.ae748594.css.map",
-    "main.00b31e1a.js.map": "/static/js/main.00b31e1a.js.map"
+    "main.bae5cd02.css.map": "/static/css/main.bae5cd02.css.map",
+    "main.7178f382.js.map": "/static/js/main.7178f382.js.map"
   },
   "entrypoints": [
-    "static/css/main.ae748594.css",
-    "static/js/main.00b31e1a.js"
+    "static/css/main.bae5cd02.css",
+    "static/js/main.7178f382.js"
   ]
 }

@@ -253,20 +253,75 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                             remarkPlugins={[remarkGfm, remarkMath]}
                             rehypePlugins={[rehypeMathjax]}
                             components={{
-                              code({node, inline, className, children, ...props}) {
-                                return inline ? (
-                                  <code className="inline-code" {...props}>
+                              p: ({node, children, ...props}) => (
+                                <p style={{ margin: '0.5rem 0', lineHeight: '1.6' }} {...props}>
+                                  {children}
+                                </p>
+                              ),
+                              ul: ({node, children, ...props}) => (
+                                <ul style={{ paddingLeft: '1.5rem', margin: '0.5rem 0' }} {...props}>
+                                  {children}
+                                </ul>
+                              ),
+                              ol: ({node, children, ...props}) => (
+                                <ol style={{ paddingLeft: '1.5rem', margin: '0.5rem 0' }} {...props}>
+                                  {children}
+                                </ol>
+                              ),
+                              li: ({node, children, ...props}) => (
+                                <li style={{ margin: '0.25rem 0' }} {...props}>
+                                  {children}
+                                </li>
+                              ),
+                              strong: ({node, children, ...props}) => (
+                                <strong style={{ fontWeight: '600' }} {...props}>
+                                  {children}
+                                </strong>
+                              ),
+                              code: ({node, inline, className, children, ...props}) => {
+  // ✅ FIX: Treat single-line code without language as inline
+                                const isInline = inline || (!className && String(children).trim().split('\n').length === 1);
+                                
+                                return isInline ? (
+                                  <code 
+                                    style={{
+                                      background: '#f5f5f5',
+                                      padding: '0.15rem 0.4rem',
+                                      borderRadius: '3px',
+                                      fontSize: '0.9em',
+                                      fontFamily: "'Courier New', Consolas, monospace",
+                                      color: '#d63384',
+                                      display: 'inline'
+                                    }}
+                                    {...props}
+                                  >
                                     {children}
                                   </code>
                                 ) : (
-                                  <pre className="code-block">
-                                    <code className={className} {...props}>
+                                  <pre 
+                                    style={{
+                                      background: '#2d2d2d',
+                                      color: '#f8f8f2',
+                                      padding: '1rem',
+                                      borderRadius: '6px',
+                                      overflow: 'auto',
+                                      margin: '0.75rem 0'
+                                    }}
+                                  >
+                                    <code 
+                                      className={className}
+                                      style={{
+                                        fontFamily: "'Courier New', Consolas, monospace",
+                                        fontSize: '0.9rem'
+                                      }}
+                                      {...props}
+                                    >
                                       {children}
                                     </code>
                                   </pre>
                                 );
                               }
-                            }}
+                                                          }}
                           >
                             {preprocessLatex(msg.content)}
                           </ReactMarkdown>
