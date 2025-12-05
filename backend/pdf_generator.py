@@ -162,7 +162,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     
                     # Estimate characters per page
                     # Both pages have same available space now (no grading boxes)
-                    chars_per_page = 3500  # ~55 lines of text
+                    chars_per_page = 2000  # ~55 lines of text
                     
                     if page_num == 0:
                         # First page
