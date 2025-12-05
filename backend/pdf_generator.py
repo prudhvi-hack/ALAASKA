@@ -162,7 +162,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     
                     # Define limits per page (considering both chars and lines)
                     max_chars_per_page = 2000
-                    max_lines_per_page = 55  # Maximum lines to prevent overflow
+                    max_lines_per_page = 35  # Maximum lines to prevent overflow
                     
                     def fits_on_page(text):
                         """Check if text fits within page limits"""
