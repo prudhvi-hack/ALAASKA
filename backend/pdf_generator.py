@@ -170,23 +170,24 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                         
                         if len(answer_text) <= chars_per_page:
                             # Short answer - fits on page 1
-                            paragraphs = answer_text.split('\n')
+                            paragraphs = answer_text.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
                                     story.append(Paragraph(para.strip(), answer_style))
                         else:
                             # Long answer - split across pages
                             answer_chunk = answer_text[:chars_per_page]
-                            # Try to break at sentence or paragraph
+                            # Try to break at paragraph, sentence, or space
                             last_break = max(
                                 answer_chunk.rfind('\n\n'),
                                 answer_chunk.rfind('. '),
-                                answer_chunk.rfind('.\n')
+                                answer_chunk.rfind('.\n'),
+                                answer_chunk.rfind(' ', int(chars_per_page * 0.8))  # ✅ Added space break
                             )
-                            if last_break > chars_per_page * 0.7:  # Only break if reasonable
+                            if last_break > chars_per_page * 0.6:  # ✅ Relaxed from 0.7 to 0.6
                                 answer_chunk = answer_chunk[:last_break + 1]
                             
-                            paragraphs = answer_chunk.split('\n')
+                            paragraphs = answer_chunk.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
                                     story.append(Paragraph(para.strip(), answer_style))
@@ -197,10 +198,30 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                             # Continuation of answer
                             story.append(Paragraph("<b>Student Answer (continued):</b>", answer_header_style))
                             
-                            # Get the remainder
-                            answer_chunk = answer_text[chars_per_page:]
+                            # Get the remainder from where page 1 ended
+                            # ✅ Calculate actual split point (matching page 1 logic)
+                            if len(answer_text) > chars_per_page:
+                                answer_chunk = answer_text[:chars_per_page]
+                                last_break = max(
+                                    answer_chunk.rfind('\n\n'),
+                                    answer_chunk.rfind('. '),
+                                    answer_chunk.rfind('.\n'),
+                                    answer_chunk.rfind(' ', int(chars_per_page * 0.8))
+                                )
+                                if last_break > chars_per_page * 0.6:
+                                    split_point = last_break + 1
+                                else:
+                                    split_point = chars_per_page
+                            else:
+                                split_point = chars_per_page
                             
-                            paragraphs = answer_chunk.split('\n')
+                            remainder = answer_text[split_point:]
+                            
+                            # ✅ Limit page 2 to prevent overflow
+                            if len(remainder) > chars_per_page:
+                                remainder = remainder[:chars_per_page] + "\n\n[Answer truncated - see chat history for full response]"
+                            
+                            paragraphs = remainder.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
                                     story.append(Paragraph(para.strip(), answer_style))
