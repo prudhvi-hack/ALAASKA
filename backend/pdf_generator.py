@@ -160,68 +160,80 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     # Clean markdown from answer
                     answer_text = strip_markdown(question['student_solution'])
                     
-                    # Estimate characters per page
-                    # Both pages have same available space now (no grading boxes)
-                    chars_per_page = 2000  # ~55 lines of text
+                    # Define limits per page (considering both chars and lines)
+                    max_chars_per_page = 2000
+                    max_lines_per_page = 55  # Maximum lines to prevent overflow
+                    
+                    def fits_on_page(text):
+                        """Check if text fits within page limits"""
+                        char_count = len(text)
+                        line_count = text.count('\n') + 1
+                        return char_count <= max_chars_per_page and line_count <= max_lines_per_page
+                    
+                    def truncate_to_fit(text, is_continuation=False):
+                        """Truncate text to fit page limits, respecting line and char counts"""
+                        lines = text.split('\n')
+                        result_lines = []
+                        char_count = 0
+                        
+                        for line in lines:
+                            # Check if adding this line would exceed limits
+                            line_len = len(line) + 1  # +1 for newline
+                            if (len(result_lines) >= max_lines_per_page or 
+                                char_count + line_len > max_chars_per_page):
+                                break
+                            result_lines.append(line)
+                            char_count += line_len
+                        
+                        result = '\n'.join(result_lines)
+                        
+                        # Add truncation notice if we cut content
+                        if len(result_lines) < len(lines):
+                            if is_continuation:
+                                result += "\n\n[Continued answer truncated - see chat history for full response]"
+                            else:
+                                result += "\n\n[Answer continues on next page...]"
+                        
+                        return result, len(result_lines) < len(lines)
                     
                     if page_num == 0:
                         # First page
                         story.append(Paragraph("<b>Student Answer:</b>", answer_header_style))
                         
-                        if len(answer_text) <= chars_per_page:
+                        if fits_on_page(answer_text):
                             # Short answer - fits on page 1
                             paragraphs = answer_text.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
                                     story.append(Paragraph(para.strip(), answer_style))
                         else:
-                            # Long answer - split across pages
-                            answer_chunk = answer_text[:chars_per_page]
-                            # Try to break at paragraph, sentence, or space
-                            last_break = max(
-                                answer_chunk.rfind('\n\n'),
-                                answer_chunk.rfind('. '),
-                                answer_chunk.rfind('.\n'),
-                                answer_chunk.rfind(' ', int(chars_per_page * 0.8))  # ✅ Added space break
-                            )
-                            if last_break > chars_per_page * 0.6:  # ✅ Relaxed from 0.7 to 0.6
-                                answer_chunk = answer_chunk[:last_break + 1]
-                            
-                            paragraphs = answer_chunk.split('\n\n')
+                            # Long answer - truncate to fit page 1
+                            truncated_text, has_more = truncate_to_fit(answer_text, is_continuation=False)
+                            paragraphs = truncated_text.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
                                     story.append(Paragraph(para.strip(), answer_style))
                     
                     else:  # page_num == 1
                         # Second page
-                        if len(answer_text) > chars_per_page:
+                        if not fits_on_page(answer_text):
                             # Continuation of answer
                             story.append(Paragraph("<b>Student Answer (continued):</b>", answer_header_style))
                             
-                            # Get the remainder from where page 1 ended
-                            # ✅ Calculate actual split point (matching page 1 logic)
-                            if len(answer_text) > chars_per_page:
-                                answer_chunk = answer_text[:chars_per_page]
-                                last_break = max(
-                                    answer_chunk.rfind('\n\n'),
-                                    answer_chunk.rfind('. '),
-                                    answer_chunk.rfind('.\n'),
-                                    answer_chunk.rfind(' ', int(chars_per_page * 0.8))
-                                )
-                                if last_break > chars_per_page * 0.6:
-                                    split_point = last_break + 1
-                                else:
-                                    split_point = chars_per_page
-                            else:
-                                split_point = chars_per_page
+                            # Calculate where page 1 ended
+                            page1_text, _ = truncate_to_fit(answer_text, is_continuation=False)
+                            # Remove truncation notice from page 1 text for calculation
+                            if "[Answer continues on next page...]" in page1_text:
+                                page1_text = page1_text.replace("\n\n[Answer continues on next page...]", "")
                             
-                            remainder = answer_text[split_point:]
+                            # Get remainder and truncate to fit page 2
+                            split_point = len(page1_text)
+                            remainder = answer_text[split_point:].lstrip('\n')
                             
-                            # ✅ Limit page 2 to prevent overflow
-                            if len(remainder) > chars_per_page:
-                                remainder = remainder[:chars_per_page] + "\n\n[Answer truncated - see chat history for full response]"
+                            # Truncate remainder to fit page 2 (no overflow)
+                            truncated_remainder, _ = truncate_to_fit(remainder, is_continuation=True)
                             
-                            paragraphs = remainder.split('\n\n')
+                            paragraphs = truncated_remainder.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
                                     story.append(Paragraph(para.strip(), answer_style))
