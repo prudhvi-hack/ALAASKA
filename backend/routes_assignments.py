@@ -1399,3 +1399,105 @@ async def submit_post_quiz(
         "total_questions": total_questions,
         "results": detailed_results
     }
+
+@router.post("/assignments/{assignment_id}/export-grades-csv")
+async def export_grades_csv(
+    assignment_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Export assignment grades as CSV with latest submission timestamp in US-East timezone (admin only)"""
+    try:
+        from io import StringIO
+        import csv
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        
+        # Get assignment details
+        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        
+        # Get all student submissions
+        cursor = student_assignments_collection.find(
+            {"assignment_id": assignment_id},
+            {"_id": 0}
+        )
+        
+        # Create CSV in memory
+        output = StringIO()
+        csv_writer = csv.writer(output)
+        
+        # Write header - only 3 columns
+        header = ["Student Name", "Email", "Latest Submission (US-East)"]
+        csv_writer.writerow(header)
+        
+        # Process each student
+        async for student_assignment in cursor:
+            # Get student details
+            user_doc = await users_collection.find_one({"email": student_assignment["student_email"]})
+            student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
+            student_email = student_assignment["student_email"]
+            
+            # Find the latest submission time across all questions
+            latest_timestamp = None
+            latest_dt = None
+            
+            for question in student_assignment["questions"]:
+                if question.get("submitted_at"):
+                    try:
+                        # Parse ISO format datetime
+                        dt_utc = datetime.fromisoformat(question["submitted_at"].replace('Z', '+00:00'))
+                        
+                        # Track the latest timestamp
+                        if latest_dt is None or dt_utc > latest_dt:
+                            latest_dt = dt_utc
+                    except Exception as e:
+                        print(f"Error parsing timestamp: {e}")
+                        continue
+            
+            # Convert latest timestamp to US-East timezone
+            if latest_dt:
+                try:
+                    dt_eastern = latest_dt.astimezone(ZoneInfo("America/New_York"))
+                    latest_timestamp = dt_eastern.strftime("%Y-%m-%d %H:%M:%S %Z")
+                except Exception as e:
+                    latest_timestamp = "Error converting timezone"
+            else:
+                latest_timestamp = "Not submitted"
+            
+            csv_writer.writerow([
+                student_name,
+                student_email,
+                latest_timestamp
+            ])
+        
+        # Get CSV content
+        csv_content = output.getvalue()
+        output.close()
+        
+        if not csv_content or csv_content.count('\n') <= 1:
+            raise HTTPException(status_code=404, detail="No submissions found for this assignment")
+        
+        # Create filename
+        safe_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in assignment["title"])
+        filename = f"{safe_title}_grades.csv"
+        
+        # Return as streaming response
+        from io import BytesIO
+        csv_bytes = BytesIO(csv_content.encode('utf-8'))
+        
+        return StreamingResponse(
+            csv_bytes,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error generating CSV: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate CSV: {str(e)}")
