@@ -23,6 +23,16 @@ def strip_markdown(text):
     clean = clean.replace('&nbsp;', ' ').replace('&quot;', '"')
     return clean.strip()
 
+def escape_for_paragraph(text):
+    """Escape text for use in ReportLab Paragraph to prevent XML parsing errors"""
+    if not text:
+        return ""
+    # Escape special XML/HTML characters
+    text = text.replace('&', '&amp;')
+    text = text.replace('<', '&lt;')
+    text = text.replace('>', '&gt;')
+    return text
+
 def create_gradescope_pdf(assignment_title, students_data, base_url="http://localhost:3000"):
     """
     Create a Gradescope-compatible PDF with 2 pages per question per student.
@@ -117,7 +127,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
     for student_idx, student in enumerate(students_data):
         # Iterate through each question
         for q_idx, question in enumerate(student["questions"]):
-            # ✅ Format submission time
+            # Format submission time
             submitted_at_str = "Not submitted"
             if question.get('submitted_at'):
                 try:
@@ -131,16 +141,16 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
             for page_num in range(2):
                 # Student info header (on every page)
                 header_data = [
-                    [Paragraph(f"<b>Name:</b> {student['name']}", header_style)],
-                    [Paragraph(f"<b>Email:</b> {student['email']}", header_style)],
-                    [Paragraph(f"<b>Assignment:</b> {assignment_title}", header_style)],
-                    [Paragraph(f"<b>Question {question['number']}</b> (Page {page_num + 1} of 2) - <b>{question['marks']} marks</b>", header_style)],
-                    [Paragraph(f"<b>Submitted:</b> {submitted_at_str}", header_style)]  # ✅ Added submission time
+                    [Paragraph(f"<b>Name:</b> {escape_for_paragraph(student['name'])}", header_style)],
+                    [Paragraph(f"<b>Email:</b> {escape_for_paragraph(student['email'])}", header_style)],
+                    [Paragraph(f"<b>Assignment:</b> {escape_for_paragraph(assignment_title)}", header_style)],
+                    [Paragraph(f"<b>Question {escape_for_paragraph(str(question['number']))}</b> (Page {page_num + 1} of 2) - <b>{question['marks']} marks</b>", header_style)],
+                    [Paragraph(f"<b>Submitted:</b> {escape_for_paragraph(submitted_at_str)}", header_style)]
                 ]
                 
                 if question.get('chat_id'):
                     chat_link = f"{base_url}/?chat_id={question['chat_id']}"
-                    header_data.append([Paragraph(f"<b>Chat Link:</b> {chat_link}", link_style)])
+                    header_data.append([Paragraph(f"<b>Chat Link:</b> {escape_for_paragraph(chat_link)}", link_style)])
                 
                 header_table = Table(header_data, colWidths=[7*inch])
                 header_table.setStyle(TableStyle([
@@ -205,14 +215,18 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                             paragraphs = answer_text.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
-                                    story.append(Paragraph(para.strip(), answer_style))
+                                    # Escape the text before creating Paragraph
+                                    safe_para = escape_for_paragraph(para.strip())
+                                    story.append(Paragraph(safe_para, answer_style))
                         else:
                             # Long answer - truncate to fit page 1
                             truncated_text, has_more = truncate_to_fit(answer_text, is_continuation=False)
                             paragraphs = truncated_text.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
-                                    story.append(Paragraph(para.strip(), answer_style))
+                                    # Escape the text before creating Paragraph
+                                    safe_para = escape_for_paragraph(para.strip())
+                                    story.append(Paragraph(safe_para, answer_style))
                     
                     else:  # page_num == 1
                         # Second page
@@ -236,7 +250,9 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                             paragraphs = truncated_remainder.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
-                                    story.append(Paragraph(para.strip(), answer_style))
+                                    # Escape the text before creating Paragraph
+                                    safe_para = escape_for_paragraph(para.strip())
+                                    story.append(Paragraph(safe_para, answer_style))
                         # else: page 2 stays empty if answer fits on page 1
                 
                 else:
