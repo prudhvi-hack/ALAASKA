@@ -8,7 +8,7 @@ import { useAuth } from './contexts/AuthContext';
 import api from './api/axios'; 
 
 function App() {
-  const { user, isAuthenticated, isLoading: authLoading, isAdmin, setIsAdmin, getToken, loginWithRedirect, logout } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, isAdmin, setIsAdmin, isGrader, setIsGrader, getToken, loginWithRedirect, logout } = useAuth();
 
   const [chatId, setChatId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -130,20 +130,22 @@ useEffect(() => {
 useEffect(() => {
   if (!isAuthenticated) return;
 
-  const checkAdminStatus = async () => {
+  const checkUserStatus = async () => {
     try {
-      const adminRes = await api.get('/admin/check');
-      setIsAdmin(adminRes.data.is_admin);
+      // Use the new /admin/status endpoint that doesn't require admin access
+      const statusRes = await api.get('/admin/status');
+      setIsAdmin(statusRes.data.is_admin);
+      setIsGrader(statusRes.data.is_grader);
     } catch (err) {
-      // Not an admin, that's fine
-      if (err.response?.status === 403) {
-        setIsAdmin(false);
-      }
+      // If endpoint fails, user is neither admin nor grader
+      console.error('Failed to check user status:', err);
+      setIsAdmin(false);
+      setIsGrader(false);
     }
   };
 
-  checkAdminStatus();
-}, [isAuthenticated, setIsAdmin]);
+  checkUserStatus();
+}, [isAuthenticated, setIsAdmin, setIsGrader]);
 
   const sendMessage = async () => {
     if (!userInput.trim() || isLoading) return;
@@ -576,7 +578,7 @@ useEffect(() => {
             <AssignmentsPage 
               autoOpenAssignmentId={autoOpenAssignmentId}
               autoScrollToQuestionId={autoScrollToQuestionId}
-              onClearAutoOpen={handleClearAutoOpen} 
+              onClearAutoOpen={handleClearAutoOpen}
             />
           ) : (
             <ChatInterface

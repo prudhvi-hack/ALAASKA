@@ -1099,6 +1099,418 @@
   border-top: 2px solid #e0e0e0;
 }
 
+/* ===== GRADING VIEW STYLES ===== */
+.grading-view {
+  width: 100%;
+  height: 100%;
+  padding: 1.5rem;
+  background: #f5f7fa;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.grading-header {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+.grading-header h2 {
+  margin: 0.5rem 0;
+  color: #2c3e50;
+  font-size: 1.8rem;
+}
+
+.grading-header .assignment-meta {
+  color: #7f8c8d;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+}
+
+.grading-controls {
+  background: white;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.search-input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #9b59b6;
+}
+
+.submission-stats {
+  display: flex;
+  gap: 1.5rem;
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.submission-stats span {
+  white-space: nowrap;
+}
+
+.submissions-table {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.submissions-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.submissions-table thead {
+  background: #34495e;
+  color: white;
+}
+
+.submissions-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.submissions-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.submissions-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.student-name {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.student-email {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.progress-bar-container {
+  flex: 1;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3498db, #2ecc71);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.9rem;
+  color: #7f8c8d;
+  white-space: nowrap;
+}
+
+.status-badge {
+  padding: 0.35rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge.submitted {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-badge.in-progress {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.not-started {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.timestamp-cell {
+  color: #7f8c8d;
+  font-size: 0.9rem;
+}
+
+.view-submission-button {
+  background: #9b59b6;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.view-submission-button:hover:not(:disabled) {
+  background: #8e44ad;
+}
+
+.view-submission-button:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+/* Student Submission Detail Styles */
+.student-submission-detail {
+  width: 100%;
+  height: 100%;
+  padding: 1.5rem;
+  background: #f5f7fa;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.submission-header {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+.submission-title-section {
+  margin: 0.5rem 0;
+}
+
+.submission-title-section h2 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.8rem;
+}
+
+.submission-title-section .student-email {
+  color: #7f8c8d;
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+}
+
+.submission-meta h3 {
+  margin: 1rem 0 0.5rem 0;
+  color: #34495e;
+  font-size: 1.3rem;
+}
+
+.submission-status {
+  margin: 0.5rem 0 0 0;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.submission-status.submitted {
+  background: #d4edda;
+  color: #155724;
+}
+
+.submission-status.in-progress {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.question-card.answered {
+  border-left: 4px solid #2ecc71;
+}
+
+.question-card.unanswered {
+  border-left: 4px solid #e74c3c;
+}
+
+.answer-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.answer-status.answered {
+  background: #d4edda;
+  color: #155724;
+}
+
+.answer-status.unanswered {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.student-answer-section {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+
+.answer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.answer-header h4 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.submission-time {
+  color: #7f8c8d;
+  font-size: 0.85rem;
+}
+
+.student-answer {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+}
+
+.chat-link-section {
+  margin-top: 1rem;
+}
+
+.view-chat-button {
+  display: inline-block;
+  background: #3498db;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.view-chat-button:hover {
+  background: #2980b9;
+}
+
+.chat-history-preview {
+  margin-top: 1rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 1rem;
+  background: white;
+}
+
+.chat-history-preview summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #34495e;
+  user-select: none;
+}
+
+.chat-history-preview summary:hover {
+  color: #2c3e50;
+}
+
+.chat-messages {
+  margin-top: 1rem;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.chat-message {
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 6px;
+}
+
+.chat-message.user {
+  background: #e3f2fd;
+  border-left: 3px solid #2196f3;
+}
+
+.chat-message.assistant {
+  background: #f3e5f5;
+  border-left: 3px solid #9c27b0;
+}
+
+.chat-message.system {
+  background: #fafafa;
+  border-left: 3px solid #757575;
+  font-size: 0.9rem;
+}
+
+.message-header {
+  margin-bottom: 0.5rem;
+}
+
+.message-role {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.message-content {
+  color: #2c3e50;
+}
+
+.no-answer {
+  background: #f8d7da;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid #f5c6cb;
+  margin-top: 1rem;
+  text-align: center;
+  color: #721c24;
+}
+
+.hints-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+}
+
+.hints-section summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #856404;
+  user-select: none;
+}
+
+.hints-list {
+  margin: 0.75rem 0 0 1.5rem;
+  color: #856404;
+}
+
+.hints-list li {
+  margin: 0.5rem 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header-top-row {
@@ -1120,5 +1532,24 @@
 
   .submit-button-small {
     width: 100%;
+  }
+
+  .grading-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .submissions-table {
+    overflow-x: auto;
+  }
+
+  .submissions-table table {
+    min-width: 800px;
+  }
+
+  .answer-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 }
