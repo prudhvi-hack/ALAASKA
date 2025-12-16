@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from backend.auth import get_current_user, http_bearer
 from fastapi.security import HTTPAuthorizationCredentials
-from backend.admin import require_admin
+from backend.admin import require_admin, require_grader
 from backend.models_assignments import (
     CreateTemplateRequest, 
     CreateAssignmentRequest, 
@@ -1501,3 +1501,143 @@ async def export_grades_csv(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to generate CSV: {str(e)}")
+
+
+# ========== GRADING ROUTES ==========
+
+@router.get("/assignments/{assignment_id}/submissions")
+async def get_assignment_submissions(
+    assignment_id: str,
+    user: dict = Depends(require_grader)
+):
+    """Get all student submissions for an assignment (grader/admin only)"""
+    try:
+        # Get assignment details
+        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        
+        # Get all student submissions
+        cursor = student_assignments_collection.find(
+            {"assignment_id": assignment_id},
+            {"_id": 0}
+        )
+        
+        submissions = []
+        async for student_assignment in cursor:
+            # Get student details
+            user_doc = await users_collection.find_one({"email": student_assignment["student_email"]})
+            student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
+            
+            # Calculate latest submission time
+            latest_submitted_at = None
+            for question in student_assignment.get("questions", []):
+                if question.get("submitted_at"):
+                    if latest_submitted_at is None or question["submitted_at"] > latest_submitted_at:
+                        latest_submitted_at = question["submitted_at"]
+            
+            submissions.append({
+                "student_email": student_assignment["student_email"],
+                "student_name": student_name,
+                "accepted": student_assignment.get("accepted", False),
+                "submitted": student_assignment.get("submitted", False),
+                "submitted_at": student_assignment.get("submitted_at"),
+                "latest_answer_time": latest_submitted_at,
+                "questions_answered": student_assignment.get("questions_answered", 0),
+                "total_questions": student_assignment.get("total_questions", 0),
+                "pre_quiz_completed": student_assignment.get("pre_quiz_completed", False),
+                "post_quiz_completed": student_assignment.get("post_quiz_completed", False)
+            })
+        
+        return {
+            "assignment": {
+                "assignment_id": assignment["assignment_id"],
+                "title": assignment["title"],
+                "due_date": assignment.get("due_date"),
+                "total_questions": len(assignment.get("questions", []))
+            },
+            "submissions": submissions
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting submissions: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get submissions: {str(e)}")
+
+
+@router.get("/assignments/{assignment_id}/submissions/{student_email}")
+async def get_student_submission(
+    assignment_id: str,
+    student_email: str,
+    user: dict = Depends(require_grader)
+):
+    """Get a specific student's submission details (grader/admin only)"""
+    try:
+        # Get assignment details
+        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
+        if not assignment:
+            raise HTTPException(status_code=404, detail="Assignment not found")
+        
+        # Get student submission
+        student_assignment = await student_assignments_collection.find_one(
+            {
+                "assignment_id": assignment_id,
+                "student_email": student_email
+            },
+            {"_id": 0}
+        )
+        
+        if not student_assignment:
+            raise HTTPException(status_code=404, detail="Student submission not found")
+        
+        # Get student details
+        user_doc = await users_collection.find_one({"email": student_email})
+        student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
+        
+        # Enrich questions with chat history
+        enriched_questions = []
+        for question in student_assignment.get("questions", []):
+            question_data = question.copy()
+            
+            # Get chat history if chat_id exists
+            if question.get("chat_id"):
+                chat = await conversations_collection.find_one(
+                    {"conversation_id": question["chat_id"]},
+                    {"_id": 0}
+                )
+                if chat:
+                    question_data["chat_history"] = chat.get("messages", [])
+            
+            enriched_questions.append(question_data)
+        
+        return {
+            "assignment": {
+                "assignment_id": assignment["assignment_id"],
+                "title": assignment["title"],
+                "instructions_md": assignment.get("instructions_md", ""),
+                "due_date": assignment.get("due_date")
+            },
+            "student": {
+                "email": student_email,
+                "name": student_name
+            },
+            "submission": {
+                "accepted": student_assignment.get("accepted", False),
+                "submitted": student_assignment.get("submitted", False),
+                "submitted_at": student_assignment.get("submitted_at"),
+                "questions_answered": student_assignment.get("questions_answered", 0),
+                "total_questions": student_assignment.get("total_questions", 0),
+                "questions": enriched_questions
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting student submission: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to get student submission: {str(e)}")

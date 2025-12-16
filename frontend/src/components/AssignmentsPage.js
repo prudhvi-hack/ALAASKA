@@ -3,17 +3,25 @@ import api from '../api/axios';
 import '../styles/assignments.css';
 import AssignmentsList from './assignments/AssignmentsList';
 import AssignmentDetail from './assignments/AssignmentDetail';
+import GradingView from './assignments/GradingView';
+
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AssignmentsPage({ 
   autoOpenAssignmentId = null, 
   autoScrollToQuestionId = null,
   onClearAutoOpen = null
 }) {
+  const { isAdmin, isGrader } = useAuth();
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [gradingAssignment, setGradingAssignment] = useState(null);
+  
+  // Check if user is grader or admin
+  const isGraderOrAdmin = isGrader || isAdmin;
 
   useEffect(() => {
     loadAssignments();
@@ -69,11 +77,16 @@ export default function AssignmentsPage({
 
   const handleBackToAssignments = () => {
     setSelectedAssignment(null);
+    setGradingAssignment(null);
     loadAssignments()
     
     if (onClearAutoOpen) {
       onClearAutoOpen();
     }
+  };
+
+  const handleOpenGrading = (assignmentId, assignmentTitle) => {
+    setGradingAssignment({ id: assignmentId, title: assignmentTitle });
   };
 
   if (loading) {
@@ -90,6 +103,16 @@ export default function AssignmentsPage({
         <p>{error}</p>
         <button onClick={loadAssignments} className="retry-button">Retry</button>
       </div>
+    );
+  }
+
+  if (gradingAssignment) {
+    return (
+      <GradingView
+        assignmentId={gradingAssignment.id}
+        assignmentTitle={gradingAssignment.title}
+        onBack={handleBackToAssignments}
+      />
     );
   }
 
@@ -115,6 +138,8 @@ export default function AssignmentsPage({
         assignments={assignments}
         onLoadAssignmentDetails={loadAssignmentDetails}
         onRefresh={loadAssignments}
+        isGraderOrAdmin={isGraderOrAdmin}
+        onOpenGrading={handleOpenGrading}
       />
     </div>
   );
