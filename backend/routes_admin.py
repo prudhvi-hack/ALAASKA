@@ -17,6 +17,15 @@ async def check_admin_status(user: dict = Depends(require_admin)):
         "email": user["email"]
     }
 
+@router.get("/status")
+async def check_user_status(user: dict = Depends(get_current_user)):
+    """Check current user's role status (available to all authenticated users)"""
+    return {
+        "is_admin": user.get("is_admin", False),
+        "is_grader": user.get("is_grader", False),
+        "email": user["email"]
+    }
+
 @router.get("/list")
 async def list_admins(user: dict = Depends(require_admin)):
     """List all admins"""
