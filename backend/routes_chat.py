@@ -250,7 +250,7 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
 
     messages.append({"role": "assistant", "content": reply})
 
-    if not existing and summary in ("", "New Chat"):
+    if not summary or summary == "" or summary == "New Chat":
         summary = await summarize_title(msg_text)
 
     conversation_doc = {
