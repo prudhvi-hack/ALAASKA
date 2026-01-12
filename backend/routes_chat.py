@@ -265,15 +265,12 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
              f"Reference Answer 1 (ID: {rag_homework_answers[0]['chunk_id']}): "
             f"{rag_homework_answers[0]['answer_text']}\n"
         )
-        if len(rag_homework_answers) > 1:
-            SYSTEM_PROMPT_WITH_RAG += (
-                f"Reference Answer 2 (ID: {rag_homework_answers[1]['chunk_id']}): "
-                f"{rag_homework_answers[1]['answer_text']}\n"
-                f"Reference Answer 3 (ID: {rag_homework_answers[2]['chunk_id']}): "
-                f"{rag_homework_answers[2]['answer_text']}\n"
-                "[END REFERENCE CONTEXT]\n"
+        for i, answer in enumerate(rag_homework_answers[:3], start=1):
+            SYSTEM_PROMPT_WITH_RAG += (f"Reference Answer {i} (ID: {answer['chunk_id']}): {answer['answer_text']}\n"
             )
+           
         SYSTEM_PROMPT_WITH_RAG += (
+            "[END REFERENCE CONTEXT]\n"
             "DO NOT DIRECTLY GIVE THE FINAL ANSWER. HELP THE STUDENT FIND IT ON THEIR OWN."
             "ASSESS RELEVANCE: Determine if the reference answers are relevant to the student's question."
             "- If RELEVANT: Use it to guide the student, but don't directly reveal it"
