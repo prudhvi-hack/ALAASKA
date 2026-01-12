@@ -4,6 +4,7 @@ from backend.auth import get_current_user, http_bearer
 from backend.models import ChatRequest
 from backend.db_mongo import conversations_collection
 from backend.db_assignments import student_assignments_collection
+from backend.chroma_query import query_homework
 from backend.config import OPENAI_API_KEY, MODEL_ID, SUMMARIZE_MODEL_ID
 from openai import AsyncOpenAI
 from datetime import datetime, timezone
@@ -17,11 +18,12 @@ client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_PROMPT = (
     "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own."
-    "Keep the conversation going with a question at the end your replies."
-    "Identify the student's level with guiding questions about the topic they are inquiring about."
-    "When appropriate throughout the conversation use these: flashcards, mini quizzes, scenarios, hints."
-    "Discuss only academic topics and nothing else."
+    "- When appropriate throughout the conversation use either flashcards, yes or no mini quizzes, scenarios, or hints."
+    "- If student asks about multiple questions at once, encourage starting a new chat for each question."
+    "- Discuss only academic topics and nothing else."
 )
+#    "Keep the conversation going with a question at the end your replies."
+#    "Identify the student's level with guiding questions about the exact topic they are inquiring about."
 
 async def summarize_title(text: str) -> str:
     try:
@@ -231,11 +233,64 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     if existing:
         messages = existing.get("messages", [])
         summary = existing.get("summary", "New Chat")
+        rag_done = existing.get("rag_done", False)
+        rag_homework_answers = existing.get("rag_homework_answers", [])
     else:
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         summary = "New Chat"
+        rag_done = False
+        rag_homework_answers = []
+
+    # Check if this is first user message and RAG hasn't been done
+    is_first_user_message = len([m for m in messages if m["role"] == "user"]) == 0
+    
+    if is_first_user_message and not rag_done:
+        try:
+            rag_results = await query_homework(msg_text)
+            if rag_results:
+                rag_homework_answers = rag_results
+                logger.info(f"RAG query successful for chat {chat_id}")
+        except Exception as e:
+            logger.warning(f"ChromaDB query failed: {e}")
+        rag_done = True
 
     messages.append({"role": "user", "content": msg_text})
+
+    # Update SYSTEM_PROMPT if RAG answers exist
+    if rag_homework_answers:
+        SYSTEM_PROMPT_WITH_RAG = (
+            "You are ALAASKA, a Socratic teaching assistant. Your task is to guide the student to think critically and find the solution on their own."
+            "Discuss only academic topics and nothing else."
+            "[REFERENCE CONTEXT - DO NOT REVEAL]\n"
+             f"Reference Answer 1 (ID: {rag_homework_answers[0]['chunk_id']}): "
+            f"{rag_homework_answers[0]['answer_text']}\n"
+        )
+        if len(rag_homework_answers) > 1:
+            SYSTEM_PROMPT_WITH_RAG += (
+                f"Reference Answer 2 (ID: {rag_homework_answers[1]['chunk_id']}): "
+                f"{rag_homework_answers[1]['answer_text']}\n"
+                f"Reference Answer 3 (ID: {rag_homework_answers[2]['chunk_id']}): "
+                f"{rag_homework_answers[2]['answer_text']}\n"
+                "[END REFERENCE CONTEXT]\n"
+            )
+        SYSTEM_PROMPT_WITH_RAG += (
+            "DO NOT DIRECTLY GIVE THE FINAL ANSWER. HELP THE STUDENT FIND IT ON THEIR OWN."
+            "ASSESS RELEVANCE: Determine if the reference answers are relevant to the student's question."
+            "- If RELEVANT: Use it to guide the student, but don't directly reveal it"
+            "- If NOT RELEVANT: Disregard it completely and rely on your own knowledge"
+            "TEACHING METHOD:\n"
+            "Guide the student using EXACTLY ONE of these methods:\n"
+            "FLASHCARD, MINI QUIZ, SCENARIO or HINT\n"
+            "- If student provides the CORRECT ANSWER: Congratulate them enthusiastically, then pose a brief question that extends or deepens their understanding.\n"
+            "- If student provides an INCORRECT or PARTIAL answer:- Continue guiding using one of the three teaching methods.\n"
+            "- Maintain an encouraging tone"
+        )
+        messages[0] = {"role": "system", "content": SYSTEM_PROMPT_WITH_RAG}
+        logger.info(
+            f"chunk_ids={[r['chunk_id'] for r in rag_homework_answers]}"
+        )
+    else:
+        messages[0] = {"role": "system", "content": SYSTEM_PROMPT}
 
     try:
         resp = await client.chat.completions.create(
@@ -250,7 +305,7 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
 
     messages.append({"role": "assistant", "content": reply})
 
-    if not existing and summary in ("", "New Chat"):
+    if not summary or summary == "" or summary == "New Chat":
         summary = await summarize_title(msg_text)
 
     conversation_doc = {
@@ -263,7 +318,9 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
         "is_deleted": existing.get("is_deleted", False) if existing else False,
         "is_assignment_chat": existing.get("is_assignment_chat", False) if existing else False,
         "assignment_id": existing.get("assignment_id") if existing else None,
-        "question_id": existing.get("question_id") if existing else None
+        "question_id": existing.get("question_id") if existing else None,
+        "rag_homework_answers": rag_homework_answers,
+        "rag_done": rag_done
     }
 
     await conversations_collection.replace_one(
