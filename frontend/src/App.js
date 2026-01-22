@@ -147,6 +147,12 @@ useEffect(() => {
         const withoutLoader = prev.slice(0, -1);
         return [...withoutLoader, { role: "assistant", content: res.data.response }];
       });
+      // *** THESE 3 LINES ENSURE SUMMARY REFRESHES ***
+      if (res.data.summary) {
+        setConversations(prev => 
+          prev.map(c => c.chat_id === res.data.chat_id ? { ...c, summary: res.data.summary } : c)
+        );
+      }
 
       // Update chat ID if new chat
       if (res.data.chat_id !== chatId) {

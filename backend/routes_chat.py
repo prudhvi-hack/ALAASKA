@@ -271,14 +271,14 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
            
         SYSTEM_PROMPT_WITH_RAG += (
             "[END REFERENCE CONTEXT]\n"
-            "DO NOT DIRECTLY GIVE THE FINAL ANSWER. HELP THE STUDENT FIND IT ON THEIR OWN."
-            "ASSESS RELEVANCE: Determine if the reference answers are relevant to the student's question."
-            "- If RELEVANT: Use it to guide the student, but don't directly reveal it"
-            "- If NOT RELEVANT: Disregard it completely and rely on your own knowledge"
+            "NEVER DIRECTLY GIVE THE FINAL ANSWER. HELP THE STUDENT FIND IT ON THEIR OWN.\n"
+            "ASSESS RELEVANCE: Determine if the reference answers are relevant to the student's question.\n"
+            "- If RELEVANT: Use it to guide the student, but don't directly reveal it \n"
+            "- If NOT RELEVANT: Disregard it completely and rely on your own knowledge \n"
             "TEACHING METHOD:\n"
             "Guide the student using EXACTLY ONE of these methods:\n"
             "FLASHCARD, MINI QUIZ, SCENARIO or HINT\n"
-            "- If student provides the CORRECT ANSWER: Congratulate them enthusiastically, then pose a brief question that extends or deepens their understanding.\n"
+            "- If student provides the CORRECT ANSWER: DO NOT REVEAL IT. Congratulate them enthusiastically, then pose a brief question that extends or deepens their understanding.\n"
             "- If student provides an INCORRECT or PARTIAL answer:- Continue guiding using one of the three teaching methods.\n"
             "- Maintain an encouraging tone"
         )
@@ -329,5 +329,6 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     return {
         "response": reply,
         "chat_id": chat_id,
-        "messages": messages
+        "messages": messages,
+        "summary": summary
     }
