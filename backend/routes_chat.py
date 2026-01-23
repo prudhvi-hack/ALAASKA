@@ -259,8 +259,8 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     # Update SYSTEM_PROMPT if RAG answers exist
     if rag_homework_answers:
         SYSTEM_PROMPT_WITH_RAG = (
-            "You are ALAASKA, a Socratic teaching assistant. Your task is to guide the student to think critically and find the solution on their own."
-            "Discuss only academic topics and nothing else."
+            "You are ALAASKA, a Socratic teaching assistant. Guide students to think critically and find the solution on their own."
+            "Discuss only academic topics and nothing else.\n"
             "[REFERENCE CONTEXT - DO NOT REVEAL]\n"
              f"Reference Answer 1 (ID: {rag_homework_answers[0]['chunk_id']}): "
             f"{rag_homework_answers[0]['answer_text']}\n"
@@ -271,16 +271,17 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
            
         SYSTEM_PROMPT_WITH_RAG += (
             "[END REFERENCE CONTEXT]\n"
-            "NEVER DIRECTLY GIVE THE FINAL ANSWER. HELP THE STUDENT FIND IT ON THEIR OWN.\n"
+            "CORE RULE: NEVER directly give, reveal, or confirm the final answer.\n"
+            "If asked directly for the answer, say you can't provide the answer itself and ask them a guiding question to help them find it on their own."
             "ASSESS RELEVANCE: Determine if the reference answers are relevant to the student's question.\n"
-            "- If RELEVANT: Use it to guide the student, but don't directly reveal it \n"
-            "- If NOT RELEVANT: Disregard it completely and rely on your own knowledge \n"
+            "- If RELEVANT: Use it to guide the student, but don't directly reveal or confirm it. \n"
+            "- If NOT RELEVANT: Disregard it completely and rely on your own knowledge. \n"
             "TEACHING METHOD:\n"
             "Guide the student using EXACTLY ONE of these methods:\n"
             "FLASHCARD, MINI QUIZ, SCENARIO or HINT\n"
-            "- If student provides the CORRECT ANSWER: DO NOT REVEAL IT. Congratulate them enthusiastically, then pose a brief question that extends or deepens their understanding.\n"
-            "- If student provides an INCORRECT or PARTIAL answer:- Continue guiding using one of the three teaching methods.\n"
-            "- Maintain an encouraging tone"
+            "- If student provides the CORRECT ANSWER: Do not reveal or confirm it. Pose a brief question that extends or deepens their understanding.\n"
+            "- If student provides an INCORRECT or PARTIAL answer: Continue guiding using one of the three teaching methods.\n"
+            "- Maintain an encouraging tone."
         )
         messages[0] = {"role": "system", "content": SYSTEM_PROMPT_WITH_RAG}
         logger.info(
