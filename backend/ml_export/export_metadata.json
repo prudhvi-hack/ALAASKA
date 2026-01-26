@@ -1,0 +1,20 @@
+{
+  "export_timestamp": "2026-02-25T01:41:46.024266+00:00",
+  "filter": {
+    "type": "single_assignment",
+    "assignment_id": "c1b91a99-5d96-4d32-a8f7-48e68ba4b581",
+    "assignment_title": "Assignment Dataset"
+  },
+  "counts": {
+    "assignments": 1,
+    "student_assignments": 10,
+    "conversations": 50,
+    "telemetry": 1197
+  },
+  "files": [
+    "assignments.json",
+    "student_assignments.json",
+    "conversations.json",
+    "telemetry.json"
+  ]
+}

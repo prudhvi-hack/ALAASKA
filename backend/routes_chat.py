@@ -290,10 +290,13 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     else:
         messages[0] = {"role": "system", "content": SYSTEM_PROMPT}
 
+    # Strip metadata for OpenAI API call (only send role and content)
+    messages_for_api = [{"role": m["role"], "content": m["content"]} for m in messages]
+    
     try:
         resp = await client.chat.completions.create(
             model=MODEL_ID,
-            messages=messages,
+            messages=messages_for_api,
             temperature=0.7
         )
         reply = resp.choices[0].message.content or ""
