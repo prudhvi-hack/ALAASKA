@@ -42,6 +42,23 @@ async def summarize_title(text: str) -> str:
 def now_utc():
     return datetime.now(timezone.utc)
 
+def now_utc_iso():
+    """Return current UTC time as ISO string for message timestamps"""
+    return datetime.now(timezone.utc).isoformat()
+
+def create_message(role: str, content: str) -> dict:
+    """
+    Create a message with ML analysis metadata.
+    Includes timestamp, char_count, word_count for behavioral analysis.
+    """
+    return {
+        "role": role,
+        "content": content,
+        "timestamp": now_utc_iso(),
+        "char_count": len(content),
+        "word_count": len(content.split()) if content else 0
+    }
+
 
 # ========== GET ALL CONVERSATIONS ==========
 
@@ -179,8 +196,8 @@ async def start_chat(auth: HTTPAuthorizationCredentials = Depends(http_bearer)):
 
     chat_id = uuid.uuid4().hex
     initial_messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "assistant", "content": "Hi! Welcome to ALAASKA. How can I help you today?"}
+        create_message("system", SYSTEM_PROMPT),
+        create_message("assistant", "Hi! Welcome to ALAASKA. How can I help you today?")
     ]
 
     conversation_doc = {
@@ -232,15 +249,18 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
         messages = existing.get("messages", [])
         summary = existing.get("summary", "New Chat")
     else:
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [create_message("system", SYSTEM_PROMPT)]
         summary = "New Chat"
 
-    messages.append({"role": "user", "content": msg_text})
+    messages.append(create_message("user", msg_text))
 
+    # Strip metadata for OpenAI API call (only send role and content)
+    messages_for_api = [{"role": m["role"], "content": m["content"]} for m in messages]
+    
     try:
         resp = await client.chat.completions.create(
             model=MODEL_ID,
-            messages=messages,
+            messages=messages_for_api,
             temperature=0.7
         )
         reply = resp.choices[0].message.content or ""
@@ -248,7 +268,7 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
         logger.error(f"OpenAI chat error: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
-    messages.append({"role": "assistant", "content": reply})
+    messages.append(create_message("assistant", reply))
 
     if not summary or summary == "" or summary == "New Chat":
         summary = await summarize_title(msg_text)
