@@ -7,6 +7,15 @@ import rehypeMathjax from 'rehype-mathjax';
 import api from '../api/axios';
 import LatexEditor from './LatexEditor';
 import '../styles/assignment_chat.css';
+import {
+  initTelemetry,
+  cleanupTelemetry,
+  handlePaste as telemetryPaste,
+  handleKeyDown as telemetryKeyDown,
+  handleFocusLoss,
+  handleFocusGain,
+  handleMessageSend,
+} from '../api/telemetry';
 
 export default function ChatInterface({ chatId, messages, input, setInput, sendMessage, onNavigateToAssignment }) {
   const [metadata, setMetadata] = useState(null);
@@ -21,7 +30,36 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
     if (chatId) {
       loadChatMetadata();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
+
+  // Initialize telemetry when metadata is loaded (for assignment chats)
+  useEffect(() => {
+    if (chatId && metadata?.is_assignment_chat) {
+      initTelemetry(chatId, metadata.assignment_id, metadata.question_id);
+    } else if (chatId) {
+      // Also track regular chats (but with null assignment/question)
+      initTelemetry(chatId, null, null);
+    }
+    
+    return () => {
+      cleanupTelemetry();
+    };
+  }, [chatId, metadata?.is_assignment_chat, metadata?.assignment_id, metadata?.question_id]);
+
+  // Set up focus/blur event listeners for tab switching detection
+  useEffect(() => {
+    const onFocus = () => handleFocusGain();
+    const onBlur = () => handleFocusLoss();
+    
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('blur', onBlur);
+    
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -91,8 +129,30 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
   };
 
   const handleKeyDown = (e) => {
+    // Track keystroke for telemetry (only if chatId exists)
+    if (chatId) {
+      telemetryKeyDown(e);
+    }
+    
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      handleSendWithTelemetry();
+    }
+  };
+
+  // Handle paste events for telemetry
+  const handlePaste = (e) => {
+    if (chatId) {
+      telemetryPaste(e);
+    }
+  };
+
+  // Wrap sendMessage to include telemetry
+  const handleSendWithTelemetry = () => {
+    if (input.trim()) {
+      if (chatId) {
+        handleMessageSend(); // Record telemetry before sending
+      }
       sendMessage();
     }
   };
@@ -358,7 +418,9 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
               <LatexEditor
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onSubmit={sendMessage}
+                onSubmit={handleSendWithTelemetry}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder="Type your answer using Markdown and LaTeX..."
               />
               <div className="latex-submit-bar">
@@ -370,7 +432,7 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                   📝
                 </button>
                 <button 
-                  onClick={sendMessage}
+                  onClick={handleSendWithTelemetry}
                   className="latex-send-button"
                   disabled={!input.trim()}
                 >
@@ -392,11 +454,12 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
                   placeholder="Type your message here... (Shift+Enter for new line)"
                   rows="3"
                 />
                 <button 
-                  onClick={sendMessage} 
+                  onClick={handleSendWithTelemetry} 
                   className="send-button"
                   disabled={!input.trim()}
                 >
