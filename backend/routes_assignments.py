@@ -30,44 +30,59 @@ from typing import Optional, List
 
 router = APIRouter()
 
-# ========== HELPER FUNCTION ==========
+# ========== HELPER FUNCTIONS ==========
+
+def now_utc_iso():
+    """Return current UTC time as ISO string for message timestamps"""
+    return datetime.now(timezone.utc).isoformat()
+
+def create_message(role: str, content: str) -> dict:
+    """
+    Create a message with ML analysis metadata.
+    Includes timestamp, char_count, word_count for behavioral analysis.
+    """
+    return {
+        "role": role,
+        "content": content,
+        "timestamp": now_utc_iso(),
+        "char_count": len(content),
+        "word_count": len(content.split()) if content else 0
+    }
 
 def create_assignment_system_prompt(question_number: str, question_text: str, hints: list = None) -> list:
     """
     Create initial messages for an assignment question chat.
     
-    Returns list of [system_message, assistant_greeting]
+    Returns list of [system_message, assistant_greeting] with ML metadata
     """
     hints_text = ""
     if hints and len(hints) > 0:
         hints_text = "\n\nAvailable hints for this question:\n" + "\n".join([f"- {hint}" for hint in hints])
     
-    return [
-        {
-            "role": "system",
-            "content": (
-                "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own. "
-                "If a student says he lacks foundational or conceptual knowledge, you may provide clear explanations, definitions, or analogies to build their base understanding. "
-                "Never reveal full or partial solutions to the actual assignment question. If the student says they don't understand, ask them to explain their reasoning first, then build from it. "
-                "Break problems into small steps. After each step, ask what they think comes next. Confirm correctness only, no explanations. "
-                "If wrong, give a counterexample or simpler question, not the fix. Always end replies with a guiding question. "
-                "Have the student summarize once enough progress is made and ask them to use the 'Mark as Final Answer' button to submit. "
-                "Acknowledge that you are an AI; if a student reasonably argues that your complex calculation is incorrect, graciously re-evaluate their reasoning rather than stubbornly insisting on your output."
-                "Assess their level through guiding questions, and use flashcards, mini quizzes, or scenarios when suitable."
-                "Discuss only academic topics."
-                f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
-            )
-        },
-        {
-            "role": "assistant",
-            "content": f"""Hi! I'm here to help you work through this assignment question:
+    system_content = (
+        "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own. "
+        "If a student says he lacks foundational or conceptual knowledge, you may provide clear explanations, definitions, or analogies to build their base understanding. "
+        "Never reveal full or partial solutions to the actual assignment question. If the student says they don't understand, ask them to explain their reasoning first, then build from it. "
+        "Break problems into small steps. After each step, ask what they think comes next. Confirm correctness only, no explanations. "
+        "If wrong, give a counterexample or simpler question, not the fix. Always end replies with a guiding question. "
+        "Have the student summarize once enough progress is made and ask them to use the 'Mark as Final Answer' button to submit. "
+        "Acknowledge that you are an AI; if a student reasonably argues that your complex calculation is incorrect, graciously re-evaluate their reasoning rather than stubbornly insisting on your output."
+        "Assess their level through guiding questions, and use flashcards, mini quizzes, or scenarios when suitable."
+        "Discuss only academic topics."
+        f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
+    )
+    
+    assistant_content = f"""Hi! I'm here to help you work through this assignment question:
 
 **Question {question_number}:** {question_text}
 
 Before we dive in, I'd like to understand your initial thoughts. What's your first impression of this question? What concepts or ideas come to mind when you read it?
 
 Take your time - there's no rush. Let's work through this together! 🎯"""
-        }
+    
+    return [
+        create_message("system", system_content),
+        create_message("assistant", assistant_content)
     ]
 
 async def check_submission_enabled(assignment_id: str, student_email: str):
