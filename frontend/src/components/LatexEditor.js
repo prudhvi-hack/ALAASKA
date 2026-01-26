@@ -5,7 +5,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeMathjax from 'rehype-mathjax';
 
-export default function LatexEditor({ value, onChange, onSubmit, placeholder }) {
+export default function LatexEditor({ value, onChange, onSubmit, onKeyDown, onPaste, placeholder }) {
   const textareaRef = useRef(null);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [history, setHistory] = useState([value || '']);
@@ -237,6 +237,11 @@ const insertAtCursor = (text, isBlock = false, needsMath = false, moveCursorBack
 
   // Handle keyboard shortcuts
   const handleKeyDown = (e) => {
+    // Call external onKeyDown handler for telemetry tracking
+    if (onKeyDown) {
+      onKeyDown(e);
+    }
+    
   // ✅ ADD: Ctrl+Z for undo
     if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
       e.preventDefault();
@@ -258,6 +263,13 @@ const insertAtCursor = (text, isBlock = false, needsMath = false, moveCursorBack
     
     // Track cursor position
     setCursorPosition(e.target.selectionStart);
+  };
+
+  // Handle paste events for telemetry
+  const handlePaste = (e) => {
+    if (onPaste) {
+      onPaste(e);
+    }
   };
 
   // Preprocess LaTeX for rendering
@@ -318,6 +330,7 @@ const insertAtCursor = (text, isBlock = false, needsMath = false, moveCursorBack
             value={value}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={placeholder || "Type your answer using Markdown and LaTeX...\n\nInline math: $x + y$\nBlock math: $$\\frac{a}{b}$$\nSubscript: $x_{1}$\nSuperscript: $x^{2}$\n\nPress Ctrl+Enter to submit"}
             className="latex-input"
           />
