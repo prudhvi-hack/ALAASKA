@@ -4,7 +4,7 @@ from backend.auth import get_current_user, http_bearer
 from backend.models import ChatRequest
 from backend.db_mongo import conversations_collection
 from backend.db_assignments import student_assignments_collection
-from backend.config import OPENAI_API_KEY, MODEL_ID, SUMMARIZE_MODEL_ID
+from backend.config import OPENAI_API_KEY, MODEL_ID, ASSIGNMENT_MODEL_ID, SUMMARIZE_MODEL_ID
 from openai import AsyncOpenAI
 from datetime import datetime, timezone
 import uuid
@@ -257,15 +257,19 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     # Strip metadata for OpenAI API call (only send role and content)
     messages_for_api = [{"role": m["role"], "content": m["content"]} for m in messages]
     
+    # Use different model based on chat type
+    is_assignment_chat = existing.get("is_assignment_chat", False) if existing else False
+    selected_model = ASSIGNMENT_MODEL_ID if is_assignment_chat else MODEL_ID
+    
     try:
         resp = await client.chat.completions.create(
-            model=MODEL_ID,
+            model=selected_model,
             messages=messages_for_api,
             temperature=0.7
         )
         reply = resp.choices[0].message.content or ""
     except Exception as e:
-        logger.error(f"OpenAI chat error: {e}")
+        logger.error(f"OpenAI chat error for model {selected_model}: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
     messages.append(create_message("assistant", reply))
