@@ -1,5 +1,6 @@
 __pycache__/
 database_export*/
+ds442_vdb/*
 .env
 *.pyc
 *test.py

@@ -30,7 +30,7 @@ async def summarize_title(text: str) -> str:
         resp = await client.chat.completions.create(
             model=SUMMARIZE_MODEL_ID,
             messages=[
-                {"role": "system", "content": "Give a 4-word title to this message"},
+                {"role": "system", "content": "Give a 4-word title to this message. Do not reveal the answer in this summary."},
                 {"role": "user", "content": text}
             ],
             temperature=0.3
