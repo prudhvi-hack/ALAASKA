@@ -6,3 +6,4 @@ database_export*/
 *.csv
 alaaska_env/*
 temp.py
+ml_export/*
