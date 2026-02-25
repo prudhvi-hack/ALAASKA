@@ -91,7 +91,6 @@ python3.10 -m venv alaaska_env
 source alaaska_env/bin/activate
 pip install -r requirements.txt
 
-
 # Setup Frontend  
 cd ../frontend
 npm install
@@ -145,19 +144,6 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8000
 # Terminal 2 - Frontend  
 cd alaaska_app/frontend
 npm start
-```
-
-### 2.6 Create First Admin User
-```bash
-# Create First Admin User (after first login via Auth0)
-# Replace "MONGODB_CLIENT" with your database name from .env (e.g., that_alaaska_db)
-# Replace YOUR_EMAIL with the email you'll use to login
-mongosh "MONGODB_CLIENT" --eval '
-db.users.updateOne(
-  { email: "YOUR_EMAIL@example.com" },
-  { $set: { is_admin: true, is_grader: true } },
-  { upsert: false }
-)'
 ```
 
 **Test URLs:**

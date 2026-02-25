@@ -1,65 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ReactDOM from 'react-dom';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import rehypeMathjax from 'rehype-mathjax';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import api from '../api/axios';
 import LatexEditor from './LatexEditor';
 import '../styles/assignment_chat.css';
-import {
-  initTelemetry,
-  cleanupTelemetry,
-  handlePaste as telemetryPaste,
-  handleKeyDown as telemetryKeyDown,
-  handleFocusLoss,
-  handleFocusGain,
-  handleMessageSend,
-} from '../api/telemetry';
 
 export default function ChatInterface({ chatId, messages, input, setInput, sendMessage, onNavigateToAssignment }) {
   const [metadata, setMetadata] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeMenu, setActiveMenu] = useState(null);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
   const [useLatexEditor, setUseLatexEditor] = useState(false);
   const messagesEndRef = useRef(null);
-  const menuButtonRefs = useRef({});
 
   useEffect(() => {
     if (chatId) {
       loadChatMetadata();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
-
-  // Initialize telemetry when metadata is loaded (for assignment chats)
-  useEffect(() => {
-    if (chatId && metadata?.is_assignment_chat) {
-      initTelemetry(chatId, metadata.assignment_id, metadata.question_id);
-    } else if (chatId) {
-      // Also track regular chats (but with null assignment/question)
-      initTelemetry(chatId, null, null);
-    }
-    
-    return () => {
-      cleanupTelemetry();
-    };
-  }, [chatId, metadata?.is_assignment_chat, metadata?.assignment_id, metadata?.question_id]);
-
-  // Set up focus/blur event listeners for tab switching detection
-  useEffect(() => {
-    const onFocus = () => handleFocusGain();
-    const onBlur = () => handleFocusLoss();
-    
-    window.addEventListener('focus', onFocus);
-    window.addEventListener('blur', onBlur);
-    
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,30 +88,8 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
   };
 
   const handleKeyDown = (e) => {
-    // Track keystroke for telemetry (only if chatId exists)
-    if (chatId) {
-      telemetryKeyDown(e);
-    }
-    
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleSendWithTelemetry();
-    }
-  };
-
-  // Handle paste events for telemetry
-  const handlePaste = (e) => {
-    if (chatId) {
-      telemetryPaste(e);
-    }
-  };
-
-  // Wrap sendMessage to include telemetry
-  const handleSendWithTelemetry = () => {
-    if (input.trim()) {
-      if (chatId) {
-        handleMessageSend(); // Record telemetry before sending
-      }
       sendMessage();
     }
   };
@@ -160,28 +97,13 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
   const preprocessLatex = (text) => {
     if (!text) return text;
     
-    return text
+    let processed = text
       .replace(/\\\[/g, '$$')
       .replace(/\\\]/g, '$$')
       .replace(/\\\(/g, '$')
       .replace(/\\\)/g, '$');
-  };
-
-  // ✅ NEW: Handle menu toggle with position calculation
-  const handleMenuToggle = (idx, e) => {
-    e.stopPropagation();
     
-    if (activeMenu === idx) {
-      setActiveMenu(null);
-      return;
-    }
-
-    const buttonRect = e.currentTarget.getBoundingClientRect();
-    setDropdownPosition({
-      top: buttonRect.bottom + window.scrollY + 4,
-      left: buttonRect.right + window.scrollX - 200 // 200px is dropdown width
-    });
-    setActiveMenu(idx);
+    return processed;
   };
 
   useEffect(() => {
@@ -191,54 +113,6 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [activeMenu]);
-
-  // ✅ NEW: Dropdown Portal Component
-  const DropdownPortal = ({ messageIdx, messageContent }) => {
-    if (activeMenu !== messageIdx) return null;
-
-    return ReactDOM.createPortal(
-      <>
-        <div 
-          className="dropdown-overlay"
-          onClick={(e) => {
-            e.stopPropagation();
-            setActiveMenu(null);
-          }}
-        />
-        <div
-          className="message-dropdown"
-          style={{
-            position: 'fixed',
-            top: `${dropdownPosition.top}px`,
-            left: `${dropdownPosition.left}px`,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => handleMarkAsAnswer(messageContent)}
-            disabled={submitting}
-            className="dropdown-item"
-          >
-            <span className="dropdown-icon">📌</span>
-            {submitting ? 'Submitting...' : 'Mark as Final Answer'}
-          </button>
-          
-          <button
-            onClick={() => {
-              setInput(messageContent);
-              setUseLatexEditor(true);
-              setActiveMenu(null);
-            }}
-            className="dropdown-item"
-          >
-            <span className="dropdown-icon">📋</span>
-            Copy to Editor
-          </button>
-        </div>
-      </>,
-      document.body
-    );
-  };
 
   return (
     <div className="main">
@@ -310,78 +184,8 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                           </div>
                         ) : (
                           <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkMath]}
-                            rehypePlugins={[rehypeMathjax]}
-                            components={{
-                              p: ({node, children, ...props}) => (
-                                <p style={{ margin: '0.5rem 0', lineHeight: '1.6' }} {...props}>
-                                  {children}
-                                </p>
-                              ),
-                              ul: ({node, children, ...props}) => (
-                                <ul style={{ paddingLeft: '1.5rem', margin: '0.5rem 0' }} {...props}>
-                                  {children}
-                                </ul>
-                              ),
-                              ol: ({node, children, ...props}) => (
-                                <ol style={{ paddingLeft: '1.5rem', margin: '0.5rem 0' }} {...props}>
-                                  {children}
-                                </ol>
-                              ),
-                              li: ({node, children, ...props}) => (
-                                <li style={{ margin: '0.25rem 0' }} {...props}>
-                                  {children}
-                                </li>
-                              ),
-                              strong: ({node, children, ...props}) => (
-                                <strong style={{ fontWeight: '600' }} {...props}>
-                                  {children}
-                                </strong>
-                              ),
-                              code: ({node, inline, className, children, ...props}) => {
-  // ✅ FIX: Treat single-line code without language as inline
-                                const isInline = inline || (!className && String(children).trim().split('\n').length === 1);
-                                
-                                return isInline ? (
-                                  <code 
-                                    style={{
-                                      background: '#f5f5f5',
-                                      padding: '0.15rem 0.4rem',
-                                      borderRadius: '3px',
-                                      fontSize: '0.9em',
-                                      fontFamily: "'Courier New', Consolas, monospace",
-                                      color: '#d63384',
-                                      display: 'inline'
-                                    }}
-                                    {...props}
-                                  >
-                                    {children}
-                                  </code>
-                                ) : (
-                                  <pre 
-                                    style={{
-                                      background: '#2d2d2d',
-                                      color: '#f8f8f2',
-                                      padding: '1rem',
-                                      borderRadius: '6px',
-                                      overflow: 'auto',
-                                      margin: '0.75rem 0'
-                                    }}
-                                  >
-                                    <code 
-                                      className={className}
-                                      style={{
-                                        fontFamily: "'Courier New', Consolas, monospace",
-                                        fontSize: '0.9rem'
-                                      }}
-                                      {...props}
-                                    >
-                                      {children}
-                                    </code>
-                                  </pre>
-                                );
-                              }
-                                                          }}
+                            remarkPlugins={[remarkMath]}
+                            rehypePlugins={[rehypeKatex]}
                           >
                             {preprocessLatex(msg.content)}
                           </ReactMarkdown>
@@ -391,17 +195,32 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                       {msg.role === 'user' && metadata?.is_assignment_chat && !msg.isStreaming && (
                         <div className="message-actions">
                           <button
-                            ref={el => menuButtonRefs.current[idx] = el}
-                            onClick={(e) => handleMenuToggle(idx, e)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenu(activeMenu === idx ? null : idx);
+                            }}
                             disabled={submitting}
                             className={`message-menu-button ${activeMenu === idx ? 'active' : ''}`}
                             title="Options"
                           >
                             ⋮
                           </button>
-                          
-                          {/* ✅ CHANGED: Render dropdown via portal */}
-                          <DropdownPortal messageIdx={idx} messageContent={msg.content} />
+
+                          {activeMenu === idx && (
+                            <div
+                              className="message-dropdown"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                onClick={() => handleMarkAsAnswer(msg.content)}
+                                disabled={submitting}
+                                className="dropdown-item"
+                              >
+                                <span className="dropdown-icon">📌</span>
+                                {submitting ? 'Submitting...' : 'Mark as Final Answer'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -412,15 +231,14 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
           )}
         </div>
 
+        {/* ✅ UPDATED: Input Area with Left-Side Toggle */}
         <div className="input-area-wrapper">
           {useLatexEditor ? (
             <div className="latex-editor-container">
               <LatexEditor
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onSubmit={handleSendWithTelemetry}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
+                onSubmit={sendMessage}
                 placeholder="Type your answer using Markdown and LaTeX..."
               />
               <div className="latex-submit-bar">
@@ -432,7 +250,7 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                   📝
                 </button>
                 <button 
-                  onClick={handleSendWithTelemetry}
+                  onClick={sendMessage}
                   className="latex-send-button"
                   disabled={!input.trim()}
                 >
@@ -454,12 +272,11 @@ export default function ChatInterface({ chatId, messages, input, setInput, sendM
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  onPaste={handlePaste}
                   placeholder="Type your message here... (Shift+Enter for new line)"
                   rows="3"
                 />
                 <button 
-                  onClick={handleSendWithTelemetry} 
+                  onClick={sendMessage} 
                   className="send-button"
                   disabled={!input.trim()}
                 >

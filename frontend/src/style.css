@@ -167,13 +167,13 @@ body {
 .thin-sidebar {
   width: 60px;
   height: 100%;
-  background-color: whitesmoke;
+  background-color: whitesmoke; /* Same as full sidebar */
   border-right: 1px solid #e0e0e0;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 12px 0;
-  gap: 0;
+  gap: 0; /* Remove gap to control spacing manually */
   position: relative;
   z-index: 100;
   flex-shrink: 0;
@@ -193,11 +193,10 @@ body {
   transition: all 0.2s ease;
   position: relative;
 }
-
 .thin-sidebar-button.toggle-button .default-icon {
   transform: scale(2.10);
 }
-
+/* Make toggle button icons bigger in thin sidebar */
 .thin-sidebar-button:hover {
   background-color: lightseagreen;
   color: white;
@@ -205,14 +204,17 @@ body {
   transform: scale(1.05);
 }
 
+/* New chat button positioning on thin sidebar */
 .new-chat-thin {
-  margin-top: 30px;
+  margin-top: 30px; /* ~1cm spacing below toggle button */
 }
 
+/* Make plus icon bigger in thin sidebar new chat button */
 .thin-sidebar-button.new-chat-thin svg {
   transform: scale(2.0);
 }
 
+/* Toggle button icon switching */
 .toggle-button .hover-icon {
   display: none;
   position: absolute;
@@ -230,7 +232,7 @@ body {
   display: block;
 }
 
-/* === Full Sidebar === */
+/* === Full Sidebar (Show when thin sidebar is hidden) === */
 .sidebar {
   width: 280px;
   height: 100%;
@@ -238,7 +240,7 @@ body {
   border-right: 1px solid #e0e0e0;
   display: flex;
   flex-direction: column;
-  padding: 1rem 1rem 1rem 30px;
+  padding: 1rem 1rem 1rem 30px; /* ~1cm left padding for content */
   box-sizing: border-box;
   z-index: 200;
   flex-shrink: 0;
@@ -246,6 +248,7 @@ body {
   margin-top: -1.8rem;
 }
 
+/* Mobile full sidebar - overlay behavior */
 .sidebar.sidebar-mobile {
   position: fixed;
   top: 0;
@@ -266,15 +269,16 @@ body {
   align-items: center;
   margin-bottom: 1rem;
   position: relative;
-  gap: 0.5rem;
+  gap: 0.5rem; /* Add gap between elements */
 }
 
+/* Toggle button positioned to align with new chat button and chat list */
 .sidebar-toggle-left {
   margin-right: 0.5rem;
-  order: -1;
-  margin-left: -8px;
-  align-self: flex-start;
-  margin-top: 6px;
+  order: -1; /* Ensure it comes first in flex order */
+  margin-left: -8px; /* Align with new chat button and chat list */
+  align-self: flex-start; /* Align to top of flex container */
+  margin-top: 6px; /* Fine-tune vertical alignment with icon */
 }
 
 .sidebar-logo {
@@ -303,8 +307,8 @@ body {
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  width: auto;
-  height: auto;
+  width: auto; /* Allow larger icon */
+  height: auto; /* Allow larger icon */
   position: relative;
 }
 
@@ -321,6 +325,7 @@ body {
   min-height: 0;
 }
 
+/* Sidebar overlay for mobile */
 .sidebar-overlay {
   position: fixed;
   top: 0;
@@ -343,12 +348,13 @@ body {
   transition: margin-left 0.3s ease;
 }
 
+/* Content area adjustments for desktop */
 .content-area.with-full-sidebar {
-  margin-left: 0;
+  margin-left: 0; /* Full sidebar is part of flex layout */
 }
 
 .content-area.with-thin-sidebar {
-  margin-left: 0;
+  margin-left: 0; /* Thin sidebar is part of flex layout */
 }
 
 /* === Top Bar === */
@@ -462,8 +468,8 @@ body {
   flex-direction: column;
 }
 
-/* === Message Styling (ONLY for regular chat, NOT assignment chat) === */
-.chatbox .message {
+/* === Message Styling === */
+.message {
   padding: 0.75rem 1rem;
   margin: 0.5rem 0;
   border-radius: 10px;
@@ -473,11 +479,16 @@ body {
   font-size: 15px;
 }
 
-.chatbox .assistant-message {
+.user-message {
+  align-self: flex-end;
+  background-color: #e6e6e6;
+  text-align: right;
+}
+
+.assistant-message {
   align-self: flex-start;
   background-color: #ffffff;
   text-align: left;
-  border: 1px solid #e0e0e0;
 }
 
 /* === Typing Indicator === */
@@ -505,6 +516,7 @@ body {
   animation-delay: 0.4s;
 }
 
+/* === Typing Indicator with Logo === */
 .typing-indicator-with-logo {
   display: flex;
   align-items: center;
@@ -522,8 +534,8 @@ body {
   font-style: italic;
 }
 
-/* === Input Area (for regular chat) === */
-.chatbox .input-container {
+/* === Input Area === */
+.input-container {
   position: relative;
   padding-top: 0.5rem;
   z-index: 10;
@@ -533,7 +545,7 @@ body {
   max-width: 100%;
 }
 
-.chatbox .input-container textarea {
+.input-container textarea {
   width: 100%;
   padding: 0.75rem 3rem 0.75rem 0.75rem;
   padding-right: 40px;
@@ -549,7 +561,8 @@ body {
   transition: height 0.2s ease;
 }
 
-.chatbox .send-button {
+/* Send button */
+.send-button {
   position: absolute;
   right: 15px;
   top: 50%;
@@ -565,7 +578,7 @@ body {
   transition: color 0.3s ease, transform 0.3s ease;
 }
 
-.chatbox .send-button:hover {
+.send-button:hover {
   color: mintcream;
   transform: translateY(-50%) scale(1.0);
 }
@@ -587,6 +600,7 @@ button:hover {
   background-color: lightseagreen;
 }
 
+/* New chat button */
 .new-chat-button {
   background: none;
   border: none;
@@ -610,6 +624,7 @@ button:hover {
   transform: translateX(2px);
 }
 
+/* Square border around the plus icon in full sidebar new chat button */
 .new-chat-button svg {
   border: 1px solid #ccc;
   border-radius: 6px;
@@ -623,6 +638,7 @@ button:hover {
   background-color: rgba(32, 178, 170, 0.1);
 }
 
+/* Past conversations */
 .chat-title {
   color: darkgrey;
   margin-top: 5px;
@@ -631,6 +647,8 @@ button:hover {
   font-weight: normal;
 }
 
+
+/* Delete button */
 .delete-button {
   background: none !important;
   border: none !important;
@@ -675,45 +693,9 @@ button:hover {
   }
 }
 
-/* === Conversation Buttons === */
-.conversation-button {
-  background: none;
-  border: none;
-  color: dimgray;
-  text-align: left;
-  padding: 0.5rem 0;
-  margin-bottom: 0.75rem;
-  cursor: pointer;
-  font-size: 1rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: all 0.2s ease;
-  border-left: 4px solid transparent;
-  padding-left: 0.5rem;
-}
-
-.conversation-button:hover {
-  color: #333;
-  background-color: #f5f5f5;
-  text-decoration: none;
-  transform: translateX(2px);
-}
-
-.conversation-button.active-conversation {
-  background-color: #e0f2f1;
-  border-left: 4px solid lightseagreen;
-  font-weight: 600;
-  color: #00695c;
-  padding-left: 0.5rem;
-}
-
-.conversation-button.active-conversation:hover {
-  background-color: #b2dfdb;
-  color: #004d40;
-}
-
 /* === Responsive Media Queries === */
+
+/* Mobile responsive notifications */
 @media (max-width: 768px) {
   .notification {
     top: 10px;
@@ -726,7 +708,7 @@ button:hover {
     margin: 10px;
   }
   
-  .chatbox .input-container {
+  .input-container {
     width: 90%;
     padding: 0.5rem;
   }
@@ -739,6 +721,7 @@ button:hover {
     font-size: 0.9rem;
   }
   
+  /* Mobile specific adjustments */
   .thin-sidebar {
     width: 50px;
   }
@@ -752,17 +735,20 @@ button:hover {
     width: min(280px, 80vw);
   }
   
+  /* Hide user name text on mobile, show only icon */
   .user-name-text {
     display: none;
   }
 }
 
+/* Desktop: Larger sidebar when expanded */
 @media (min-width: 1200px) {
   .sidebar {
     width: clamp(300px, 20vw, 350px);
   }
 }
 
+/* Medium screens: Medium width sidebar */
 @media (min-width: 769px) and (max-width: 1199px) {
   .sidebar {
     width: clamp(280px, 25vw, 320px);
@@ -773,8 +759,52 @@ button:hover {
   }
 }
 
+/* Show user name text on larger screens */
 @media (min-width: 769px) {
   .user-name-text {
     display: inline;
   }
 }
+/* Replace the conversation button hover styles (around line 568-595) with this: */
+
+.conversation-button {
+  background: none;
+  border: none;
+  color: dimgray;
+  text-align: left;
+  padding: 0.5rem 0;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.2s ease;
+  border-left: 4px solid transparent;  /* Add transparent border for smooth transition */
+  padding-left: 0.5rem;  /* Add padding to accommodate border */
+}
+
+.conversation-button:hover {
+  color: #333;  /* ← Changed from mintcream to dark gray */
+  background-color: #f5f5f5;  /* Light gray background */
+  text-decoration: none;
+  transform: translateX(2px);
+}
+
+.conversation-button.active-conversation {
+  background-color: #e0f2f1;  /* Light teal background */
+  border-left: 4px solid lightseagreen;  /* Left border indicator */
+  font-weight: 600;  /* Bold text */
+  color: #00695c;  /* Darker teal text */
+  padding-left: 0.5rem;
+}
+
+.conversation-button.active-conversation:hover {
+  background-color: #b2dfdb;  /* Slightly darker teal on hover */
+  color: #004d40;  /* Even darker teal text on hover */
+}
+
+
+
+
+  

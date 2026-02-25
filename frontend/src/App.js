@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { MathJaxContext } from "better-react-mathjax";
 import logo from './assets/alaaska_logo.png';
 import AssignmentsPage from './components/AssignmentsPage';
 import AdminPage from './components/AdminPage';
@@ -8,7 +7,7 @@ import { useAuth } from './contexts/AuthContext';
 import api from './api/axios'; 
 
 function App() {
-  const { user, isAuthenticated, isLoading: authLoading, isAdmin, setIsAdmin, isGrader, setIsGrader, getToken, loginWithRedirect, logout } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading, isAdmin, setIsAdmin, getToken, loginWithRedirect, logout } = useAuth();
 
   const [chatId, setChatId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -28,26 +27,6 @@ function App() {
   const [autoScrollToQuestionId, setAutoScrollToQuestionId] = useState(null);
   
   const messagesEndRef = useRef(null);
-
-  const mathJaxConfig = {
-    loader: { load: ["input/tex", "output/chtml"] },
-    tex: {
-      packages: { "[+]": ["mathtools"] },
-      inlineMath: [["$", "$"], ["\\(", "\\)"]],
-      displayMath: [["$$", "$$"], ["\\[", "\\]"]],
-      processEscapes: true,
-      processEnvironments: true,
-      macros: {
-      // ✅ ADD: Define inferrule macro
-        inferrule: ["\\frac{\\displaystyle #1}{\\displaystyle #2}", 2],
-        "inferrule*": [
-          "\\frac{\\displaystyle #2}{\\displaystyle #3}\\;{\\small\\text{#1}}", 
-          3, 
-          ""
-        ]
-      }
-    },
-  };
 
   const handleNavigateToAssignment = (assignmentId, questionId) => {
     setAutoOpenAssignmentId(assignmentId);
@@ -130,22 +109,20 @@ useEffect(() => {
 useEffect(() => {
   if (!isAuthenticated) return;
 
-  const checkUserStatus = async () => {
+  const checkAdminStatus = async () => {
     try {
-      // Use the new /admin/status endpoint that doesn't require admin access
-      const statusRes = await api.get('/admin/status');
-      setIsAdmin(statusRes.data.is_admin);
-      setIsGrader(statusRes.data.is_grader);
+      const adminRes = await api.get('/admin/check');
+      setIsAdmin(adminRes.data.is_admin);
     } catch (err) {
-      // If endpoint fails, user is neither admin nor grader
-      console.error('Failed to check user status:', err);
-      setIsAdmin(false);
-      setIsGrader(false);
+      // Not an admin, that's fine
+      if (err.response?.status === 403) {
+        setIsAdmin(false);
+      }
     }
   };
 
-  checkUserStatus();
-}, [isAuthenticated, setIsAdmin, setIsGrader]);
+  checkAdminStatus();
+}, [isAuthenticated, setIsAdmin]);
 
   const sendMessage = async () => {
     if (!userInput.trim() || isLoading) return;
@@ -298,7 +275,6 @@ useEffect(() => {
   const isMobile = windowWidth <= 768;
 
   return (
-    <MathJaxContext config={mathJaxConfig}>
     <>
       {notification.show && (
         <div className={`notification notification-${notification.type}`}>
@@ -578,7 +554,7 @@ useEffect(() => {
             <AssignmentsPage 
               autoOpenAssignmentId={autoOpenAssignmentId}
               autoScrollToQuestionId={autoScrollToQuestionId}
-              onClearAutoOpen={handleClearAutoOpen}
+              onClearAutoOpen={handleClearAutoOpen} 
             />
           ) : (
             <ChatInterface
@@ -597,7 +573,6 @@ useEffect(() => {
         </div>
       </div>
     </>
-    </MathJaxContext>
   );
 }
 

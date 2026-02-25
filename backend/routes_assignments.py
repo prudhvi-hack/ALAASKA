@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from backend.auth import get_current_user, http_bearer
 from fastapi.security import HTTPAuthorizationCredentials
-from backend.admin import require_admin, require_grader
+from backend.admin import require_admin
 from backend.models_assignments import (
     CreateTemplateRequest, 
     CreateAssignmentRequest, 
@@ -30,59 +30,44 @@ from typing import Optional, List
 
 router = APIRouter()
 
-# ========== HELPER FUNCTIONS ==========
-
-def now_utc_iso():
-    """Return current UTC time as ISO string for message timestamps"""
-    return datetime.now(timezone.utc).isoformat()
-
-def create_message(role: str, content: str) -> dict:
-    """
-    Create a message with ML analysis metadata.
-    Includes timestamp, char_count, word_count for behavioral analysis.
-    """
-    return {
-        "role": role,
-        "content": content,
-        "timestamp": now_utc_iso(),
-        "char_count": len(content),
-        "word_count": len(content.split()) if content else 0
-    }
+# ========== HELPER FUNCTION ==========
 
 def create_assignment_system_prompt(question_number: str, question_text: str, hints: list = None) -> list:
     """
     Create initial messages for an assignment question chat.
     
-    Returns list of [system_message, assistant_greeting] with ML metadata
+    Returns list of [system_message, assistant_greeting]
     """
     hints_text = ""
     if hints and len(hints) > 0:
         hints_text = "\n\nAvailable hints for this question:\n" + "\n".join([f"- {hint}" for hint in hints])
     
-    system_content = (
-        "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own. "
-        "If a student says he lacks foundational or conceptual knowledge, you may provide clear explanations, definitions, or analogies to build their base understanding. "
-        "Never reveal full or partial solutions to the actual assignment question. If the student says they don't understand, ask them to explain their reasoning first, then build from it. "
-        "Break problems into small steps. After each step, ask what they think comes next. Confirm correctness only, no explanations. "
-        "If wrong, give a counterexample or simpler question, not the fix. Always end replies with a guiding question. "
-        "Have the student summarize once enough progress is made and ask them to use the 'Mark as Final Answer' button to submit. "
-        "Acknowledge that you are an AI; if a student reasonably argues that your complex calculation is incorrect, graciously re-evaluate their reasoning rather than stubbornly insisting on your output."
-        "Assess their level through guiding questions, and use flashcards, mini quizzes, or scenarios when suitable."
-        "Discuss only academic topics."
-        f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
-    )
-    
-    assistant_content = f"""Hi! I'm here to help you work through this assignment question:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are ALAASKA, a supportive teaching assistant. Your job is to guide the user to think critically and find the solution on their own. "
+                "If a student says he lacks foundational or conceptual knowledge, you may provide clear explanations, definitions, or analogies to build their base understanding. "
+                "Never reveal full or partial solutions to the actual assignment question. If the student says they don't understand, ask them to explain their reasoning first, then build from it. "
+                "Break problems into small steps. After each step, ask what they think comes next. Confirm correctness only, no explanations. "
+                "If wrong, give a counterexample or simpler question, not the fix. Always end replies with a guiding question. "
+                "Have the student summarize once enough progress is made and ask them to use the 'Mark as Final Answer' button to submit. "
+                "Acknowledge that you are an AI; if a student reasonably argues that your complex calculation is incorrect, graciously re-evaluate their reasoning rather than stubbornly insisting on your output."
+                "Assess their level through guiding questions, and use flashcards, mini quizzes, or scenarios when suitable."
+                "Discuss only academic topics."
+                f"\n\nThe student needs to solve this assignment question:\n\nQuestion {question_number}: {question_text}{hints_text}"
+            )
+        },
+        {
+            "role": "assistant",
+            "content": f"""Hi! I'm here to help you work through this assignment question:
 
 **Question {question_number}:** {question_text}
 
 Before we dive in, I'd like to understand your initial thoughts. What's your first impression of this question? What concepts or ideas come to mind when you read it?
 
 Take your time - there's no rush. Let's work through this together! 🎯"""
-    
-    return [
-        create_message("system", system_content),
-        create_message("assistant", assistant_content)
+        }
     ]
 
 async def check_submission_enabled(assignment_id: str, student_email: str):
@@ -1414,245 +1399,3 @@ async def submit_post_quiz(
         "total_questions": total_questions,
         "results": detailed_results
     }
-
-@router.post("/assignments/{assignment_id}/export-grades-csv")
-async def export_grades_csv(
-    assignment_id: str,
-    user: dict = Depends(require_admin)
-):
-    """Export assignment grades as CSV with latest submission timestamp in US-East timezone (admin only)"""
-    try:
-        from io import StringIO
-        import csv
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        
-        # Get assignment details
-        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
-        if not assignment:
-            raise HTTPException(status_code=404, detail="Assignment not found")
-        
-        # Get all student submissions
-        cursor = student_assignments_collection.find(
-            {"assignment_id": assignment_id},
-            {"_id": 0}
-        )
-        
-        # Create CSV in memory
-        output = StringIO()
-        csv_writer = csv.writer(output)
-        
-        # Write header - only 3 columns
-        header = ["Student Name", "Email", "Latest Submission (US-East)"]
-        csv_writer.writerow(header)
-        
-        # Process each student
-        async for student_assignment in cursor:
-            # Get student details
-            user_doc = await users_collection.find_one({"email": student_assignment["student_email"]})
-            student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
-            student_email = student_assignment["student_email"]
-            
-            # Find the latest submission time across all questions
-            latest_timestamp = None
-            latest_dt = None
-            
-            for question in student_assignment["questions"]:
-                if question.get("submitted_at"):
-                    try:
-                        # Parse ISO format datetime
-                        dt_utc = datetime.fromisoformat(question["submitted_at"].replace('Z', '+00:00'))
-                        
-                        # Track the latest timestamp
-                        if latest_dt is None or dt_utc > latest_dt:
-                            latest_dt = dt_utc
-                    except Exception as e:
-                        print(f"Error parsing timestamp: {e}")
-                        continue
-            
-            # Convert latest timestamp to US-East timezone
-            if latest_dt:
-                try:
-                    dt_eastern = latest_dt.astimezone(ZoneInfo("America/New_York"))
-                    latest_timestamp = dt_eastern.strftime("%Y-%m-%d %H:%M:%S %Z")
-                except Exception as e:
-                    latest_timestamp = "Error converting timezone"
-            else:
-                latest_timestamp = "Not submitted"
-            
-            csv_writer.writerow([
-                student_name,
-                student_email,
-                latest_timestamp
-            ])
-        
-        # Get CSV content
-        csv_content = output.getvalue()
-        output.close()
-        
-        if not csv_content or csv_content.count('\n') <= 1:
-            raise HTTPException(status_code=404, detail="No submissions found for this assignment")
-        
-        # Create filename
-        safe_title = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in assignment["title"])
-        filename = f"{safe_title}_grades.csv"
-        
-        # Return as streaming response
-        from io import BytesIO
-        csv_bytes = BytesIO(csv_content.encode('utf-8'))
-        
-        return StreamingResponse(
-            csv_bytes,
-            media_type="text/csv",
-            headers={
-                "Content-Disposition": f"attachment; filename={filename}"
-            }
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error generating CSV: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate CSV: {str(e)}")
-
-
-# ========== GRADING ROUTES ==========
-
-@router.get("/assignments/{assignment_id}/submissions")
-async def get_assignment_submissions(
-    assignment_id: str,
-    user: dict = Depends(require_grader)
-):
-    """Get all student submissions for an assignment (grader/admin only)"""
-    try:
-        # Get assignment details
-        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
-        if not assignment:
-            raise HTTPException(status_code=404, detail="Assignment not found")
-        
-        # Get all student submissions
-        cursor = student_assignments_collection.find(
-            {"assignment_id": assignment_id},
-            {"_id": 0}
-        )
-        
-        submissions = []
-        async for student_assignment in cursor:
-            # Get student details
-            user_doc = await users_collection.find_one({"email": student_assignment["student_email"]})
-            student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
-            
-            # Calculate latest submission time
-            latest_submitted_at = None
-            for question in student_assignment.get("questions", []):
-                if question.get("submitted_at"):
-                    if latest_submitted_at is None or question["submitted_at"] > latest_submitted_at:
-                        latest_submitted_at = question["submitted_at"]
-            
-            submissions.append({
-                "student_email": student_assignment["student_email"],
-                "student_name": student_name,
-                "accepted": student_assignment.get("accepted", False),
-                "submitted": student_assignment.get("submitted", False),
-                "submitted_at": student_assignment.get("submitted_at"),
-                "latest_answer_time": latest_submitted_at,
-                "questions_answered": student_assignment.get("questions_answered", 0),
-                "total_questions": student_assignment.get("total_questions", 0),
-                "pre_quiz_completed": student_assignment.get("pre_quiz_completed", False),
-                "post_quiz_completed": student_assignment.get("post_quiz_completed", False)
-            })
-        
-        return {
-            "assignment": {
-                "assignment_id": assignment["assignment_id"],
-                "title": assignment["title"],
-                "due_date": assignment.get("due_date"),
-                "total_questions": len(assignment.get("questions", []))
-            },
-            "submissions": submissions
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error getting submissions: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to get submissions: {str(e)}")
-
-
-@router.get("/assignments/{assignment_id}/submissions/{student_email}")
-async def get_student_submission(
-    assignment_id: str,
-    student_email: str,
-    user: dict = Depends(require_grader)
-):
-    """Get a specific student's submission details (grader/admin only)"""
-    try:
-        # Get assignment details
-        assignment = await assignments_collection.find_one({"assignment_id": assignment_id})
-        if not assignment:
-            raise HTTPException(status_code=404, detail="Assignment not found")
-        
-        # Get student submission
-        student_assignment = await student_assignments_collection.find_one(
-            {
-                "assignment_id": assignment_id,
-                "student_email": student_email
-            },
-            {"_id": 0}
-        )
-        
-        if not student_assignment:
-            raise HTTPException(status_code=404, detail="Student submission not found")
-        
-        # Get student details
-        user_doc = await users_collection.find_one({"email": student_email})
-        student_name = user_doc.get("username", "Unknown") if user_doc else "Unknown"
-        
-        # Enrich questions with chat history
-        enriched_questions = []
-        for question in student_assignment.get("questions", []):
-            question_data = question.copy()
-            
-            # Get chat history if chat_id exists
-            if question.get("chat_id"):
-                chat = await conversations_collection.find_one(
-                    {"conversation_id": question["chat_id"]},
-                    {"_id": 0}
-                )
-                if chat:
-                    question_data["chat_history"] = chat.get("messages", [])
-            
-            enriched_questions.append(question_data)
-        
-        return {
-            "assignment": {
-                "assignment_id": assignment["assignment_id"],
-                "title": assignment["title"],
-                "instructions_md": assignment.get("instructions_md", ""),
-                "due_date": assignment.get("due_date")
-            },
-            "student": {
-                "email": student_email,
-                "name": student_name
-            },
-            "submission": {
-                "accepted": student_assignment.get("accepted", False),
-                "submitted": student_assignment.get("submitted", False),
-                "submitted_at": student_assignment.get("submitted_at"),
-                "questions_answered": student_assignment.get("questions_answered", 0),
-                "total_questions": student_assignment.get("total_questions", 0),
-                "questions": enriched_questions
-            }
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error getting student submission: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to get student submission: {str(e)}")
