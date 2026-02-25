@@ -7,7 +7,6 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const { getAccessTokenSilently, isAuthenticated, loginWithRedirect, logout, user, isLoading } = useAuth0();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isGrader, setIsGrader] = useState(false);
   const tokenRef = useRef(null);
   const tokenExpiryRef = useRef(null);
 
@@ -48,7 +47,6 @@ export const AuthProvider = ({ children }) => {
     tokenRef.current = null;
     tokenExpiryRef.current = null;
     setIsAdmin(false);
-    setIsGrader(false);
     logout({ returnTo: window.location.origin });
   }, [logout]);
 
@@ -70,8 +68,6 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     isAdmin,
     setIsAdmin,
-    isGrader,
-    setIsGrader,
     getToken,
     loginWithRedirect,
     logout: handleLogout,

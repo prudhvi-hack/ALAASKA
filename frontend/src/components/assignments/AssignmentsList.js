@@ -5,15 +5,10 @@ import QuizModal from './QuizModal';
 export default function AssignmentsList({ 
   assignments, 
   onLoadAssignmentDetails,
-  onRefresh,
-  isGraderOrAdmin = false,
-  onOpenGrading
+  onRefresh 
 }) {
   const [showQuiz, setShowQuiz] = useState(null);
   const [submitting, setSubmitting] = useState(null);
-
-  // Debug: Log grader status
-  console.log('AssignmentsList - isGraderOrAdmin:', isGraderOrAdmin);
 
   const handleAcceptAssignment = async (assignmentId, hasPreQuiz) => {
     if (hasPreQuiz) {
@@ -151,8 +146,8 @@ export default function AssignmentsList({
                     View
                   </button>
                   
-                  {/* Submit Button (only show if not submitted and not grader) */}
-                  {!assignment.submitted && !isGraderOrAdmin && (
+                  {/* Submit Button (only show if not submitted) */}
+                  {!assignment.submitted && (
                     <button
                       onClick={() => handleSubmitFromList(assignment)}
                       disabled={submitting === assignment.assignment_id || !assignment.submissions_enabled }
@@ -162,53 +157,14 @@ export default function AssignmentsList({
                       {submitting === assignment.assignment_id ? 'Submitting...' : 'Submit'}
                     </button>
                   )}
-
-                  {/* Grade Button (only show for graders/admins) */}
-                  {isGraderOrAdmin && onOpenGrading && (
-                    <button
-                      onClick={() => onOpenGrading(assignment.assignment_id, assignment.title)}
-                      className="grade-button"
-                      style={{
-                        background: '#9b59b6',
-                        color: 'white',
-                        marginLeft: '0.5rem'
-                      }}
-                    >
-                      📊 Grade
-                    </button>
-                  )}
                 </>
               ) : (
-                <>
-                  {!isGraderOrAdmin ? (
-                    <button
-                      onClick={() => handleAcceptAssignment(assignment.assignment_id, assignment.has_pre_quiz)}
-                      className="accept-button"
-                    >
-                      {assignment.has_pre_quiz ? 'Take Pre-Quiz & Accept' : 'Accept Assignment'}
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => onLoadAssignmentDetails(assignment.assignment_id)}
-                        className="view-button"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => onOpenGrading(assignment.assignment_id, assignment.title)}
-                        className="grade-button"
-                        style={{
-                          background: '#9b59b6',
-                          color: 'white',
-                          marginLeft: '0.5rem'
-                        }}
-                      >
-                        📊 Grade
-                      </button>
-                    </>
-                  )}
-                </>
+                <button
+                  onClick={() => handleAcceptAssignment(assignment.assignment_id, assignment.has_pre_quiz)}
+                  className="accept-button"
+                >
+                  {assignment.has_pre_quiz ? 'Take Pre-Quiz & Accept' : 'Accept Assignment'}
+                </button>
               )}
             </div>
           </div>

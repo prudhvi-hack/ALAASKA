@@ -41,7 +41,6 @@ db = mongo_client[MONGODB_CLIENT]
 users_collection = db["users"]
 conversations_collection = db["conversations"]
 messages_collection = db["messages"]
-telemetry_collection = db["interaction_telemetry"]  # ML behavioral analysis data
 
 async def test_connection():
     """Test the async MongoDB connection"""
@@ -79,20 +78,6 @@ async def create_indexes():
         ])
         await messages_collection.create_index("chat_id")
         await messages_collection.create_index("auth0_id")
-        
-        # Telemetry collection indexes (for ML behavioral analysis)
-        await telemetry_collection.create_index([
-            ("chat_id", ASCENDING),
-            ("client_timestamp", ASCENDING)
-        ])
-        await telemetry_collection.create_index("user_id")
-        await telemetry_collection.create_index("assignment_id")
-        await telemetry_collection.create_index("event_type")
-        await telemetry_collection.create_index([
-            ("user_id", ASCENDING),
-            ("assignment_id", ASCENDING),
-            ("question_id", ASCENDING)
-        ])
         
         logger.info("Database indexes created successfully")
         return True

@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import rehypeMathjax from 'rehype-mathjax';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import api from '../../api/axios';
 import QuizModal from './QuizModal';
 
@@ -99,7 +100,7 @@ export default function AssignmentDetail({
   const MarkdownContent = ({ children }) => (
     <ReactMarkdown 
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeMathjax]}
+      rehypePlugins={[rehypeKatex]}
       components={{
         code({node, inline, className, children, ...props}) {
           return inline ? (

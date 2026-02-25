@@ -5,7 +5,7 @@ from backend.models import ChatRequest
 from backend.db_mongo import conversations_collection
 from backend.db_assignments import student_assignments_collection
 from backend.chroma_query import query_homework
-from backend.config import OPENAI_API_KEY, MODEL_ID, ASSIGNMENT_MODEL_ID, SUMMARIZE_MODEL_ID
+from backend.config import OPENAI_API_KEY, MODEL_ID, SUMMARIZE_MODEL_ID
 from openai import AsyncOpenAI
 from datetime import datetime, timezone
 import uuid
@@ -43,23 +43,6 @@ async def summarize_title(text: str) -> str:
 
 def now_utc():
     return datetime.now(timezone.utc)
-
-def now_utc_iso():
-    """Return current UTC time as ISO string for message timestamps"""
-    return datetime.now(timezone.utc).isoformat()
-
-def create_message(role: str, content: str) -> dict:
-    """
-    Create a message with ML analysis metadata.
-    Includes timestamp, char_count, word_count for behavioral analysis.
-    """
-    return {
-        "role": role,
-        "content": content,
-        "timestamp": now_utc_iso(),
-        "char_count": len(content),
-        "word_count": len(content.split()) if content else 0
-    }
 
 
 # ========== GET ALL CONVERSATIONS ==========
@@ -252,13 +235,11 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
         summary = existing.get("summary", "New Chat")
         rag_done = existing.get("rag_done", False)
         rag_homework_answers = existing.get("rag_homework_answers", [])
-        is_assignment_chat = existing.get("is_assignment_chat", False)
     else:
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         summary = "New Chat"
         rag_done = False
         rag_homework_answers = []
-        is_assignment_chat = False
 
     # Check if this is first user message and RAG hasn't been done
     is_first_user_message = len([m for m in messages if m["role"] == "user"]) == 0
@@ -273,11 +254,7 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
             logger.warning(f"ChromaDB query failed: {e}")
         rag_done = True
 
-    # Append user message (with metadata only for assignment chats)
-    if is_assignment_chat:
-        messages.append(create_message("user", msg_text))
-    else:
-        messages.append({"role": "user", "content": msg_text})
+    messages.append({"role": "user", "content": msg_text})
 
     # Update SYSTEM_PROMPT if RAG answers exist
     if rag_homework_answers:
@@ -306,41 +283,25 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
             "- If student provides an INCORRECT or PARTIAL answer: Continue guiding using one of the three teaching methods.\n"
             "- Maintain an encouraging tone."
         )
-        if is_assignment_chat:
-            messages[0] = create_message("system", SYSTEM_PROMPT_WITH_RAG)
-        else:
-            messages[0] = {"role": "system", "content": SYSTEM_PROMPT_WITH_RAG}
+        messages[0] = {"role": "system", "content": SYSTEM_PROMPT_WITH_RAG}
         logger.info(
             f"chunk_ids={[r['chunk_id'] for r in rag_homework_answers]}"
         )
     else:
-        if is_assignment_chat:
-            messages[0] = create_message("system", SYSTEM_PROMPT)
-        else:
-            messages[0] = {"role": "system", "content": SYSTEM_PROMPT}
+        messages[0] = {"role": "system", "content": SYSTEM_PROMPT}
 
-    # Strip metadata for OpenAI API call (only send role and content)
-    messages_for_api = [{"role": m["role"], "content": m["content"]} for m in messages]
-    
-    # Use different model based on chat type
-    selected_model = ASSIGNMENT_MODEL_ID if is_assignment_chat else MODEL_ID
-    
     try:
         resp = await client.chat.completions.create(
-            model=selected_model,
-            messages=messages_for_api,
+            model=MODEL_ID,
+            messages=messages,
             temperature=0.7
         )
         reply = resp.choices[0].message.content or ""
     except Exception as e:
-        logger.error(f"OpenAI chat error for model {selected_model}: {e}")
+        logger.error(f"OpenAI chat error: {e}")
         raise HTTPException(status_code=500, detail="LLM error")
 
-    # Append assistant message (with metadata only for assignment chats)
-    if is_assignment_chat:
-        messages.append(create_message("assistant", reply))
-    else:
-        messages.append({"role": "assistant", "content": reply})
+    messages.append({"role": "assistant", "content": reply})
 
     if not summary or summary == "" or summary == "New Chat":
         summary = await summarize_title(msg_text)
