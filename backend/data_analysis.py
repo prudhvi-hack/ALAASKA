@@ -221,7 +221,6 @@ async def export_all_conversations_to_csv(export_folder):
     filepath = os.path.join(export_folder, filename)
     
     with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-        #fieldnames = ['chat_id', 'auth0_id', 'username', 'email', 'summary', 'status', 'created_at', 'updated_at']
         fieldnames = ['chat_id', 'user_id', 'username', 'email', 'messages','summary', 'status', 'created_at', 'updated_at', 'is_deleted', 'is_assignment_chat', 'assignment_id', 'question_id', 'rag_homework_answers', 'rag_done']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         

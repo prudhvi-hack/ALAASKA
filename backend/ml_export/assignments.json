@@ -1,0 +1,64 @@
+[
+  {
+    "_id": "698b82f2110a8bf1f7d52dd6",
+    "assignment_id": "c1b91a99-5d96-4d32-a8f7-48e68ba4b581",
+    "template_id": "d2fdba4d-dc0b-4fdb-ae8e-e39bc7c38be7",
+    "title": "Assignment Dataset",
+    "description": "Dataset",
+    "questions": [
+      {
+        "question_id": "c9d409c0-7438-4e80-ac93-b44524a7d681",
+        "number": "1",
+        "prompt_md": "### Question: Static Scoping\n\nConsider the following pseudo-code:\n\n```c\nint x = 5;\n\nvoid show() {\n    print(x);\n}\n\nvoid compute(int n) {\n    int x = n + 1;\n    if (n == 0) {\n        show();\n        return;\n    }\n    compute(n - 1);\n}\n\nvoid main() {\n    int x = 99;\n    compute(2);\n    print(x);\n}\n\nStatic Scoping (3 pts):\nWhat does the program print if the language uses static scoping?\nProvide a step-by-step trace of the execution to justify your answer.",
+        "marks": 5.0,
+        "hints": []
+      },
+      {
+        "question_id": "c5085c7a-33f4-44f9-9cdb-e9a4a14c96f4",
+        "number": "2",
+        "prompt_md": "Consider the following pseudo-code:\n\n```c\nint x = 5;\n\nvoid show() {\n    print(x);\n}\n\nvoid compute(int n) {\n    int x = n + 1;\n    if (n == 0) {\n        show();\n        return;\n    }\n    compute(n - 1);\n}\n\nvoid main() {\n    int x = 99;\n    compute(2);\n    print(x);\n}\n\nQuestions\n**Dynamic Scoping (3 pts)** What does the program print if the language uses dynamic scoping? Provide a step-by-step trace showing how the variable x is resolved by searching the call stack.",
+        "marks": 5.0,
+        "hints": []
+      },
+      {
+        "question_id": "676635af-0f16-4c45-bfd5-b9489a5b9913",
+        "number": "3",
+        "prompt_md": "### Regular Expressions I\n\nWrite down the set of strings recognized by the following regular expressions.  \nThe alphabet is lower-case English letters (i.e., `a` to `z`).\n\n- If the set is **finite**, write down **all elements** in the set.\n- If the set is **infinite**, write down the **first 8 shortest elements**.  \n  (If there are multiple shortest elements with the same length, any of them are acceptable, but you must prioritize shorter strings first.)\n\n**Subproblem (3):**\n\nb(a?b)+ | a*",
+        "marks": 5.0,
+        "hints": []
+      },
+      {
+        "question_id": "1c66060f-bbef-44cc-b00a-fef5dd5c9460",
+        "number": "4",
+        "prompt_md": "### Ambiguity\n#### Subproblem\n\nConsider the following grammar:\n\n\\[\n\\begin{aligned}\nS &\\rightarrow S \\ \\text{or} \\ T \\mid T \\\\\nT &\\rightarrow F \\ \\text{and} \\ T \\mid F \\\\\nF &\\rightarrow \\text{true} \\mid \\text{false}\n\\end{aligned}\n\\]\n\n**Question:**  \nDetermine whether the grammar is **ambiguous**.\n\n- If it **is ambiguous**, provide:\n  - An example string with **two distinct parse trees**\n  - An **unambiguous grammar** that parses the string uniquely\n- If it **is unambiguous**, specify the **precedence** and **associativity** it enforces.\n",
+        "marks": 4.0,
+        "hints": []
+      },
+      {
+        "question_id": "069717b6-d456-4ebc-ac62-850462540af5",
+        "number": "5",
+        "prompt_md": "### Names, Scope, and Binding\n\nConsider the following pseudo-code.  \nAssume the language supports **nested subroutines** and uses **dynamic scoping**.\n\n```c\ntypedef void (*Action)();\n\nvoid show() {\n    print(v);\n}\n\nAction makeAction() {\n    int v = 5;\n    \n    Action helper() {\n        int v = 15;\n        return show;\n    }\n    \n    return helper();\n}\n\nvoid main() {\n    int v = 100;\n    Action a = makeAction();\n    a();\n}\n\nQuestion: What is the output under shallow binding? Explain the resolution of v.\n",
+        "marks": 5.0,
+        "hints": []
+      }
+    ],
+    "allowed_students": [
+      "student1@abc.com",
+      "student2@abc.com",
+      "student3@abc.com",
+      "student4@abc.com",
+      "student5@abc.com",
+      "student6@abc.com",
+      "student7@abc.com",
+      "student8@abc.com",
+      "student9@abc.com",
+      "student10@abc.com"
+    ],
+    "pre_quiz_id": null,
+    "post_quiz_id": null,
+    "submissions_enabled": true,
+    "submission_exceptions": [],
+    "created_by": "sjs8529@psu.edu",
+    "created_at": "2026-02-10T19:11:46.736000"
+  }
+]

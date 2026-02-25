@@ -167,24 +167,17 @@
   padding: 3rem 1rem;
 }
 
-/* KaTeX rendering */
-.latex-preview .katex {
+.latex-preview mjx-container {
   font-size: 1.1em;
-}
-
-.latex-preview .katex-display {
-  margin: 1.5rem 0;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-/* Help section */
-.latex-help {
-  border-top: 2px solid #e0e0e0;
-  background: #f8f9fa;
-  /* ✅ ADD: Flex-shrink to prevent overflow */
-  flex-shrink: 0;
+.latex-preview mjx-container[display="true"] {
+  margin: 1.5rem 0;
 }
+
+
 
 .help-summary {
   padding: 0.75rem 1rem;

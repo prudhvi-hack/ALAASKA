@@ -23,6 +23,16 @@ def strip_markdown(text):
     clean = clean.replace('&nbsp;', ' ').replace('&quot;', '"')
     return clean.strip()
 
+def escape_for_paragraph(text):
+    """Escape text for use in ReportLab Paragraph to prevent XML parsing errors"""
+    if not text:
+        return ""
+    # Escape special XML/HTML characters
+    text = text.replace('&', '&amp;')
+    text = text.replace('<', '&lt;')
+    text = text.replace('>', '&gt;')
+    return text
+
 def create_gradescope_pdf(assignment_title, students_data, base_url="http://localhost:3000"):
     """
     Create a Gradescope-compatible PDF with 2 pages per question per student.
@@ -117,7 +127,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
     for student_idx, student in enumerate(students_data):
         # Iterate through each question
         for q_idx, question in enumerate(student["questions"]):
-            # ✅ Format submission time
+            # Format submission time
             submitted_at_str = "Not submitted"
             if question.get('submitted_at'):
                 try:
@@ -131,16 +141,16 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
             for page_num in range(2):
                 # Student info header (on every page)
                 header_data = [
-                    [Paragraph(f"<b>Name:</b> {student['name']}", header_style)],
-                    [Paragraph(f"<b>Email:</b> {student['email']}", header_style)],
-                    [Paragraph(f"<b>Assignment:</b> {assignment_title}", header_style)],
-                    [Paragraph(f"<b>Question {question['number']}</b> (Page {page_num + 1} of 2) - <b>{question['marks']} marks</b>", header_style)],
-                    [Paragraph(f"<b>Submitted:</b> {submitted_at_str}", header_style)]  # ✅ Added submission time
+                    [Paragraph(f"<b>Name:</b> {escape_for_paragraph(student['name'])}", header_style)],
+                    [Paragraph(f"<b>Email:</b> {escape_for_paragraph(student['email'])}", header_style)],
+                    [Paragraph(f"<b>Assignment:</b> {escape_for_paragraph(assignment_title)}", header_style)],
+                    [Paragraph(f"<b>Question {escape_for_paragraph(str(question['number']))}</b> (Page {page_num + 1} of 2) - <b>{question['marks']} marks</b>", header_style)],
+                    [Paragraph(f"<b>Submitted:</b> {escape_for_paragraph(submitted_at_str)}", header_style)]
                 ]
                 
                 if question.get('chat_id'):
                     chat_link = f"{base_url}/?chat_id={question['chat_id']}"
-                    header_data.append([Paragraph(f"<b>Chat Link:</b> {chat_link}", link_style)])
+                    header_data.append([Paragraph(f"<b>Chat Link:</b> {escape_for_paragraph(chat_link)}", link_style)])
                 
                 header_table = Table(header_data, colWidths=[7*inch])
                 header_table.setStyle(TableStyle([
@@ -160,50 +170,89 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     # Clean markdown from answer
                     answer_text = strip_markdown(question['student_solution'])
                     
-                    # Estimate characters per page
-                    # Both pages have same available space now (no grading boxes)
-                    chars_per_page = 3500  # ~55 lines of text
+                    # Define limits per page (considering both chars and lines)
+                    max_chars_per_page = 2000
+                    max_lines_per_page = 35  # Maximum lines to prevent overflow
+                    
+                    def fits_on_page(text):
+                        """Check if text fits within page limits"""
+                        char_count = len(text)
+                        line_count = text.count('\n') + 1
+                        return char_count <= max_chars_per_page and line_count <= max_lines_per_page
+                    
+                    def truncate_to_fit(text, is_continuation=False):
+                        """Truncate text to fit page limits, respecting line and char counts"""
+                        lines = text.split('\n')
+                        result_lines = []
+                        char_count = 0
+                        
+                        for line in lines:
+                            # Check if adding this line would exceed limits
+                            line_len = len(line) + 1  # +1 for newline
+                            if (len(result_lines) >= max_lines_per_page or 
+                                char_count + line_len > max_chars_per_page):
+                                break
+                            result_lines.append(line)
+                            char_count += line_len
+                        
+                        result = '\n'.join(result_lines)
+                        
+                        # Add truncation notice if we cut content
+                        if len(result_lines) < len(lines):
+                            if is_continuation:
+                                result += "\n\n[Continued answer truncated - see chat history for full response]"
+                            else:
+                                result += "\n\n[Answer continues on next page...]"
+                        
+                        return result, len(result_lines) < len(lines)
                     
                     if page_num == 0:
                         # First page
                         story.append(Paragraph("<b>Student Answer:</b>", answer_header_style))
                         
-                        if len(answer_text) <= chars_per_page:
+                        if fits_on_page(answer_text):
                             # Short answer - fits on page 1
-                            paragraphs = answer_text.split('\n')
+                            paragraphs = answer_text.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
-                                    story.append(Paragraph(para.strip(), answer_style))
+                                    # Escape the text before creating Paragraph
+                                    safe_para = escape_for_paragraph(para.strip())
+                                    story.append(Paragraph(safe_para, answer_style))
                         else:
-                            # Long answer - split across pages
-                            answer_chunk = answer_text[:chars_per_page]
-                            # Try to break at sentence or paragraph
-                            last_break = max(
-                                answer_chunk.rfind('\n\n'),
-                                answer_chunk.rfind('. '),
-                                answer_chunk.rfind('.\n')
-                            )
-                            if last_break > chars_per_page * 0.7:  # Only break if reasonable
-                                answer_chunk = answer_chunk[:last_break + 1]
-                            
-                            paragraphs = answer_chunk.split('\n')
+                            # Long answer - truncate to fit page 1
+                            truncated_text, has_more = truncate_to_fit(answer_text, is_continuation=False)
+                            paragraphs = truncated_text.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
-                                    story.append(Paragraph(para.strip(), answer_style))
+                                    # Escape the text before creating Paragraph
+                                    safe_para = escape_for_paragraph(para.strip())
+                                    story.append(Paragraph(safe_para, answer_style))
                     
                     else:  # page_num == 1
                         # Second page
-                        if len(answer_text) > chars_per_page:
+                        if not fits_on_page(answer_text):
                             # Continuation of answer
                             story.append(Paragraph("<b>Student Answer (continued):</b>", answer_header_style))
                             
-                            # Get the remainder
-                            answer_chunk = answer_text[chars_per_page:]
+                            # Calculate where page 1 ended
+                            page1_text, _ = truncate_to_fit(answer_text, is_continuation=False)
+                            # Remove truncation notice from page 1 text for calculation
+                            if "[Answer continues on next page...]" in page1_text:
+                                page1_text = page1_text.replace("\n\n[Answer continues on next page...]", "")
                             
-                            paragraphs = answer_chunk.split('\n')
+                            # Get remainder and truncate to fit page 2
+                            split_point = len(page1_text)
+                            remainder = answer_text[split_point:].lstrip('\n')
+                            
+                            # Truncate remainder to fit page 2 (no overflow)
+                            truncated_remainder, _ = truncate_to_fit(remainder, is_continuation=True)
+                            
+                            paragraphs = truncated_remainder.split('\n\n')
                             for para in paragraphs:
                                 if para.strip():
-                                    story.append(Paragraph(para.strip(), answer_style))
+                                    # Escape the text before creating Paragraph
+                                    safe_para = escape_for_paragraph(para.strip())
+                                    story.append(Paragraph(safe_para, answer_style))
                         # else: page 2 stays empty if answer fits on page 1
                 
                 else:
