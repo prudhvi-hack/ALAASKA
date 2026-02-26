@@ -261,9 +261,10 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
         is_assignment_chat = False
 
     # Check if this is first user message and RAG hasn't been done
+    # Skip RAG for assignment chats - they have question-specific context already
     is_first_user_message = len([m for m in messages if m["role"] == "user"]) == 0
     
-    if is_first_user_message and not rag_done:
+    if is_first_user_message and not rag_done and not is_assignment_chat:
         try:
             rag_results = await query_homework(msg_text)
             if rag_results:
