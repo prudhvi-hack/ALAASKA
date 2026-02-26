@@ -279,8 +279,9 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     else:
         messages.append({"role": "user", "content": msg_text})
 
-    # Update SYSTEM_PROMPT if RAG answers exist
-    if rag_homework_answers:
+    # Update SYSTEM_PROMPT if RAG answers exist (only for non-assignment chats)
+    # Assignment chats already have their question-specific system prompt
+    if rag_homework_answers and not is_assignment_chat:
         SYSTEM_PROMPT_WITH_RAG = (
             "You are ALAASKA, a Socratic teaching assistant. Guide students to think critically and find the solution on their own."
             "Discuss only academic topics and nothing else.\n"
@@ -306,18 +307,14 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
             "- If student provides an INCORRECT or PARTIAL answer: Continue guiding using one of the three teaching methods.\n"
             "- Maintain an encouraging tone."
         )
-        if is_assignment_chat:
-            messages[0] = create_message("system", SYSTEM_PROMPT_WITH_RAG)
-        else:
-            messages[0] = {"role": "system", "content": SYSTEM_PROMPT_WITH_RAG}
+        messages[0] = {"role": "system", "content": SYSTEM_PROMPT_WITH_RAG}
         logger.info(
             f"chunk_ids={[r['chunk_id'] for r in rag_homework_answers]}"
         )
-    else:
-        if is_assignment_chat:
-            messages[0] = create_message("system", SYSTEM_PROMPT)
-        else:
-            messages[0] = {"role": "system", "content": SYSTEM_PROMPT}
+    elif not is_assignment_chat:
+        # Only update system prompt for non-assignment chats
+        messages[0] = {"role": "system", "content": SYSTEM_PROMPT}
+    # For assignment chats: keep the original system prompt with question details
 
     # Strip metadata for OpenAI API call (only send role and content)
     messages_for_api = [{"role": m["role"], "content": m["content"]} for m in messages]
