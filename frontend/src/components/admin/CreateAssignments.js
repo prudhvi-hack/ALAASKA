@@ -160,43 +160,6 @@ export default function CreateAssignments({ templates, quizTemplates, assignment
     }
   };
 
-  // Add this function after exportAssignmentPDF
-  const exportGradesCSV = async (assignmentId, assignmentTitle) => {
-    try {
-      setBusy(true);
-      showNotification('Generating CSV... This may take a moment', 'info');
-      
-      const response = await api.post(
-        `/assignments/${assignmentId}/export-grades-csv`,
-        {},
-        {
-          responseType: 'blob'
-        }
-      );
-      
-      const blob = new Blob([response.data], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      
-      const safeTitle = assignmentTitle.replace(/[^a-zA-Z0-9-_ ]/g, '_');
-      link.download = `${safeTitle}_grades.csv`;
-      
-      document.body.appendChild(link);
-      link.click();
-      
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      showNotification('CSV downloaded successfully!', 'success');
-    } catch (err) {
-      console.error('Export error:', err);
-      showNotification(err.response?.data?.detail || 'Failed to export CSV', 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const openSubmissionSettings = async (assignmentId) => {
   try {
     const res = await api.get(`/assignments/${assignmentId}/submission-settings`);
@@ -388,15 +351,7 @@ const saveSubmissionSettings = async () => {
                   >
                     ⚙️ Submission Settings
                   </button>
-                  <button
-                    onClick={() => exportGradesCSV(assignment.assignment_id, assignment.title)}
-                    disabled={busy || loading}
-                    className="export-pdf-button"
-                    style={{ marginLeft: '0.5rem' }}
-                  >
-                    📊 Export Submission time CSV
-                  </button>
-                                    
+                  
                   <button
                     onClick={() => exportAssignmentPDF(assignment.assignment_id, assignment.title)}
                     disabled={busy || loading}
