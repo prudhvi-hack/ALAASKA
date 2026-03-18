@@ -45,7 +45,8 @@ def _paragraph_height(text, style, width):
         return 0
     paragraph = Paragraph(_to_paragraph_markup(text), style)
     _, height = paragraph.wrap(width, 10_000)
-    return height
+    # Paragraph flow also consumes style spacing in frame layout.
+    return height + getattr(style, 'spaceBefore', 0) + getattr(style, 'spaceAfter', 0)
 
 def _fit_lines_to_height(lines, max_height, style, width, overflow_notice=None):
     """
@@ -167,6 +168,8 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
     continuation_notice = "[Answer continues on next page...]"
     truncated_notice = "[Continued answer truncated - see chat history for full response]"
     spacer_height = 0.15 * inch
+    # Small guard band to avoid borderline wrap differences causing overflow pages.
+    layout_safety_margin = 6
     
     # Iterate through each student
     for student_idx, student in enumerate(students_data):
@@ -224,7 +227,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                         story.append(Paragraph("<b>Student Answer:</b>", answer_header_style))
 
                         answer_header_height = _paragraph_height("Student Answer:", answer_header_style, doc.width)
-                        max_answer_height = max(0, doc.height - header_height - spacer_height - answer_header_height)
+                        max_answer_height = max(0, doc.height - header_height - spacer_height - answer_header_height - layout_safety_margin)
 
                         # Fit as many lines as possible on page 1, reserving space for continuation notice if needed.
                         page1_line_count = _fit_lines_to_height(
@@ -249,7 +252,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     else:  # page_num == 1
                         # Recompute what page 1 consumed so page 2 only gets true remainder.
                         answer_header_height_p1 = _paragraph_height("Student Answer:", answer_header_style, doc.width)
-                        max_answer_height_p1 = max(0, doc.height - header_height - spacer_height - answer_header_height_p1)
+                        max_answer_height_p1 = max(0, doc.height - header_height - spacer_height - answer_header_height_p1 - layout_safety_margin)
                         page1_line_count = _fit_lines_to_height(
                             answer_lines,
                             max_answer_height_p1,
@@ -262,7 +265,7 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                             story.append(Paragraph("<b>Student Answer (continued):</b>", answer_header_style))
 
                             answer_header_height = _paragraph_height("Student Answer (continued):", answer_header_style, doc.width)
-                            max_answer_height = max(0, doc.height - header_height - spacer_height - answer_header_height)
+                            max_answer_height = max(0, doc.height - header_height - spacer_height - answer_header_height - layout_safety_margin)
 
                             remaining_lines = answer_lines[page1_line_count:]
                             page2_line_count = _fit_lines_to_height(
