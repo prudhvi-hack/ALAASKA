@@ -33,6 +33,47 @@ def escape_for_paragraph(text):
     text = text.replace('>', '&gt;')
     return text
 
+def _to_paragraph_markup(text):
+    """Convert plain text into safe Paragraph markup preserving line breaks."""
+    if not text:
+        return ""
+    return escape_for_paragraph(text).replace('\n', '<br/>')
+
+def _paragraph_height(text, style, width):
+    """Measure rendered height for text in a ReportLab Paragraph."""
+    if not text or not text.strip():
+        return 0
+    paragraph = Paragraph(_to_paragraph_markup(text), style)
+    _, height = paragraph.wrap(width, 10_000)
+    return height
+
+def _fit_lines_to_height(lines, max_height, style, width, overflow_notice=None):
+    """
+    Return how many leading lines fit in max_height.
+
+    If overflow_notice is provided, it is appended while measuring whenever content
+    is truncated to ensure the notice itself also fits.
+    """
+    if max_height <= 0 or not lines:
+        return 0
+
+    lo, hi = 0, len(lines)
+    best = 0
+
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = '\n'.join(lines[:mid])
+        if mid < len(lines) and overflow_notice:
+            candidate = (candidate + '\n\n' + overflow_notice).strip()
+
+        if _paragraph_height(candidate, style, width) <= max_height:
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    return best
+
 def create_gradescope_pdf(assignment_title, students_data, base_url="http://localhost:3000"):
     """
     Create a Gradescope-compatible PDF with 2 pages per question per student.
@@ -122,6 +163,10 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
     )
     
     story = []
+
+    continuation_notice = "[Answer continues on next page...]"
+    truncated_notice = "[Continued answer truncated - see chat history for full response]"
+    spacer_height = 0.15 * inch
     
     # Iterate through each student
     for student_idx, student in enumerate(students_data):
@@ -161,98 +206,83 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
                     ('LEFTPADDING', (0, 0), (-1, -1), 8),
                 ]))
+
+                # Measure fixed space consumed before answer content.
+                _, header_height = header_table.wrap(doc.width, doc.height)
                 
                 story.append(header_table)
-                story.append(Spacer(1, 0.15*inch))
+                story.append(Spacer(1, spacer_height))
                 
                 # Student's answer section
                 if question.get('student_solution'):
                     # Clean markdown from answer
                     answer_text = strip_markdown(question['student_solution'])
-                    
-                    # Define limits per page (considering both chars and lines)
-                    max_chars_per_page = 2000
-                    max_lines_per_page = 35  # Maximum lines to prevent overflow
-                    
-                    def fits_on_page(text):
-                        """Check if text fits within page limits"""
-                        char_count = len(text)
-                        line_count = text.count('\n') + 1
-                        return char_count <= max_chars_per_page and line_count <= max_lines_per_page
-                    
-                    def truncate_to_fit(text, is_continuation=False):
-                        """Truncate text to fit page limits, respecting line and char counts"""
-                        lines = text.split('\n')
-                        result_lines = []
-                        char_count = 0
-                        
-                        for line in lines:
-                            # Check if adding this line would exceed limits
-                            line_len = len(line) + 1  # +1 for newline
-                            if (len(result_lines) >= max_lines_per_page or 
-                                char_count + line_len > max_chars_per_page):
-                                break
-                            result_lines.append(line)
-                            char_count += line_len
-                        
-                        result = '\n'.join(result_lines)
-                        
-                        # Add truncation notice if we cut content
-                        if len(result_lines) < len(lines):
-                            if is_continuation:
-                                result += "\n\n[Continued answer truncated - see chat history for full response]"
-                            else:
-                                result += "\n\n[Answer continues on next page...]"
-                        
-                        return result, len(result_lines) < len(lines)
+                    answer_lines = answer_text.split('\n')
                     
                     if page_num == 0:
                         # First page
                         story.append(Paragraph("<b>Student Answer:</b>", answer_header_style))
-                        
-                        if fits_on_page(answer_text):
-                            # Short answer - fits on page 1
-                            paragraphs = answer_text.split('\n\n')
-                            for para in paragraphs:
-                                if para.strip():
-                                    # Escape the text before creating Paragraph
-                                    safe_para = escape_for_paragraph(para.strip())
-                                    story.append(Paragraph(safe_para, answer_style))
+
+                        answer_header_height = _paragraph_height("Student Answer:", answer_header_style, doc.width)
+                        max_answer_height = max(0, doc.height - header_height - spacer_height - answer_header_height)
+
+                        # Fit as many lines as possible on page 1, reserving space for continuation notice if needed.
+                        page1_line_count = _fit_lines_to_height(
+                            answer_lines,
+                            max_answer_height,
+                            answer_style,
+                            doc.width,
+                            overflow_notice=continuation_notice
+                        )
+
+                        if page1_line_count >= len(answer_lines):
+                            page1_text = answer_text
                         else:
-                            # Long answer - truncate to fit page 1
-                            truncated_text, has_more = truncate_to_fit(answer_text, is_continuation=False)
-                            paragraphs = truncated_text.split('\n\n')
-                            for para in paragraphs:
-                                if para.strip():
-                                    # Escape the text before creating Paragraph
-                                    safe_para = escape_for_paragraph(para.strip())
-                                    story.append(Paragraph(safe_para, answer_style))
+                            page1_text = '\n'.join(answer_lines[:page1_line_count]).strip()
+                            if page1_text:
+                                page1_text += '\n\n' + continuation_notice
+                            else:
+                                page1_text = continuation_notice
+
+                        story.append(Paragraph(_to_paragraph_markup(page1_text), answer_style))
                     
                     else:  # page_num == 1
-                        # Second page
-                        if not fits_on_page(answer_text):
-                            # Continuation of answer
+                        # Recompute what page 1 consumed so page 2 only gets true remainder.
+                        answer_header_height_p1 = _paragraph_height("Student Answer:", answer_header_style, doc.width)
+                        max_answer_height_p1 = max(0, doc.height - header_height - spacer_height - answer_header_height_p1)
+                        page1_line_count = _fit_lines_to_height(
+                            answer_lines,
+                            max_answer_height_p1,
+                            answer_style,
+                            doc.width,
+                            overflow_notice=continuation_notice
+                        )
+
+                        if page1_line_count < len(answer_lines):
                             story.append(Paragraph("<b>Student Answer (continued):</b>", answer_header_style))
-                            
-                            # Calculate where page 1 ended
-                            page1_text, _ = truncate_to_fit(answer_text, is_continuation=False)
-                            # Remove truncation notice from page 1 text for calculation
-                            if "[Answer continues on next page...]" in page1_text:
-                                page1_text = page1_text.replace("\n\n[Answer continues on next page...]", "")
-                            
-                            # Get remainder and truncate to fit page 2
-                            split_point = len(page1_text)
-                            remainder = answer_text[split_point:].lstrip('\n')
-                            
-                            # Truncate remainder to fit page 2 (no overflow)
-                            truncated_remainder, _ = truncate_to_fit(remainder, is_continuation=True)
-                            
-                            paragraphs = truncated_remainder.split('\n\n')
-                            for para in paragraphs:
-                                if para.strip():
-                                    # Escape the text before creating Paragraph
-                                    safe_para = escape_for_paragraph(para.strip())
-                                    story.append(Paragraph(safe_para, answer_style))
+
+                            answer_header_height = _paragraph_height("Student Answer (continued):", answer_header_style, doc.width)
+                            max_answer_height = max(0, doc.height - header_height - spacer_height - answer_header_height)
+
+                            remaining_lines = answer_lines[page1_line_count:]
+                            page2_line_count = _fit_lines_to_height(
+                                remaining_lines,
+                                max_answer_height,
+                                answer_style,
+                                doc.width,
+                                overflow_notice=truncated_notice
+                            )
+
+                            if page2_line_count >= len(remaining_lines):
+                                page2_text = '\n'.join(remaining_lines)
+                            else:
+                                page2_text = '\n'.join(remaining_lines[:page2_line_count]).strip()
+                                if page2_text:
+                                    page2_text += '\n\n' + truncated_notice
+                                else:
+                                    page2_text = truncated_notice
+
+                            story.append(Paragraph(_to_paragraph_markup(page2_text), answer_style))
                         # else: page 2 stays empty if answer fits on page 1
                 
                 else:
@@ -262,8 +292,12 @@ def create_gradescope_pdf(assignment_title, students_data, base_url="http://loca
                         story.append(Paragraph("[No answer submitted]", no_answer_style))
                     # Page 2 stays empty
                 
-                # Page break after each page
-                story.append(PageBreak())
+                # Page break after each page except the final generated page.
+                is_last_student = student_idx == len(students_data) - 1
+                is_last_question = q_idx == len(student["questions"]) - 1
+                is_last_page = page_num == 1
+                if not (is_last_student and is_last_question and is_last_page):
+                    story.append(PageBreak())
     
     # Build PDF
     doc.build(story)
