@@ -41,8 +41,9 @@ async def export_conversations_to_csv(conv_export_folder):
 
         conversations = await conversations_collection.find(query_filter).sort("email", 1).to_list(None)
 
-        filename = f"base_conversations_{start_date.replace('-', '')}_to_{end_date.replace('-', '')}.csv"
+        filename = f"db_conversations_{start_date.replace('-', '')}_to_{end_date.replace('-', '')}.csv"
         filepath = os.path.join(conv_export_folder, filename)
+        # UNCOMMENT THIS BELOW TO GENERATE ONLY NEW WEEKS AND SKIP EXISTING FILES
         #if os.path.exists(filepath):
             #print(f"Skipping {filename}, already exists")
             #continue
@@ -132,9 +133,9 @@ async def export_students_usage_to_csv(export_folder):
                 'last_conv_user_msg': last_conv['user_msg_count'] if last_conv else 0
             })
 
-        filename = f"base_usage_{start_date.replace('-', '')}_to_{end_date.replace('-', '')}.csv"
+        filename = f"db_usage_{start_date.replace('-', '')}_to_{end_date.replace('-', '')}.csv"
         filepath = os.path.join(export_folder, filename)
-        # UNCOMMENT THIS TO GENERATE ONLY NEW WEEKS AND SKIP EXISTING FILES
+        # UNCOMMENT THIS BELOW TO GENERATE ONLY NEW WEEKS AND SKIP EXISTING FILES
         #if os.path.exists(filepath):
             #print(f"Skipping {filename}, already exists")
             #continue
@@ -230,7 +231,7 @@ async def export_all_data():
     
     # Export all collections to the folder
     await export_conversations_to_csv(conv_export_folder)
-    #await export_students_usage_to_csv(export_folder)
+    await export_students_usage_to_csv(export_folder)
     #await export_users_to_csv(export_folder)
     #await export_messages_to_csv(export_folder)
     
