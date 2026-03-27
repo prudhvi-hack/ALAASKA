@@ -1,5 +1,7 @@
 __pycache__/
 database_export*/
+db_exports*/
+db_conversations*/
 ds442_vdb/*
 .env
 *.pyc
