@@ -359,11 +359,15 @@ async def chat(request: ChatRequest, auth: HTTPAuthorizationCredentials = Depend
     selected_model = ASSIGNMENT_MODEL_ID if is_assignment_chat else MODEL_ID
     
     try:
-        resp = await client.chat.completions.create(
-            model=selected_model,
-            messages=messages_for_api,
-            temperature=0.7
-        )
+        # Some assignment models (e.g., gpt-5-mini) don't support temperature parameter
+        create_kwargs = {
+            "model": selected_model,
+            "messages": messages_for_api
+        }
+        if selected_model != ASSIGNMENT_MODEL_ID:  # Only add temperature for non-assignment models
+            create_kwargs["temperature"] = 0.7
+        
+        resp = await client.chat.completions.create(**create_kwargs)
         reply = resp.choices[0].message.content or ""
     except Exception as e:
         logger.error(f"OpenAI chat error for model {selected_model}: {e}")
